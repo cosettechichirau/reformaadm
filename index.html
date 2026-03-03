@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Reformă Administrativă — România</title>
+  <meta name="description" content="Propunere de reorganizare administrativă a comunelor din România bazată pe date din Recensământul 2021." />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&display=swap" rel="stylesheet">
+  <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
+  <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg: #0a0e17;
+      --surface: rgba(10, 14, 23, 0.88);
+      --border: rgba(255, 255, 255, 0.08);
+      --text: #e8edf5;
+      --muted: rgba(232, 237, 245, 0.38);
+      --accent: #c9a84c;
+      --red: #ce2939;
+      --blue: #003DA5;
+      --radius: 14px;
+      --mono: 'IBM Plex Mono', monospace;
+    }
+
+    html, body {
+      width: 100%; height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'IBM Plex Sans', sans-serif;
+      overflow: hidden;
+    }
+
+    #map { width: 100vw; height: 100vh; }
+
+    /* ── FLOATING PANELS ──────────────────────────────────── */
+    .panel {
+      position: absolute;
+      background: var(--surface);
+      backdrop-filter: blur(20px) saturate(1.4);
+      -webkit-backdrop-filter: blur(20px) saturate(1.4);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+
+    /* ── HEADER ───────────────────────────────────────────── */
+    #header {
+      top: 20px; left: 20px;
+      padding: 20px 22px;
+      max-width: 320px;
+    }
+
+    .flag-bar {
+      display: flex;
+      gap: 3px;
+      margin-bottom: 14px;
+      align-items: center;
+    }
+    .flag-bar span {
+      height: 3px; width: 24px;
+      border-radius: 2px;
+    }
+    .flag-bar .ro-blue  { background: var(--blue); }
+    .flag-bar .ro-gold  { background: var(--accent); }
+    .flag-bar .ro-red   { background: var(--red); }
+    .flag-bar em {
+      font-style: normal;
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-left: 8px;
+    }
+
+    #header h1 {
+      font-family: 'Playfair Display', serif;
+      font-size: 21px;
+      font-weight: 700;
+      color: #fff;
+      line-height: 1.2;
+      margin-bottom: 8px;
+    }
+
+    #header p {
+      font-size: 12.5px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    /* ── TOGGLE ───────────────────────────────────────────── */
+    #view-toggle {
+      top: 20px; right: 20px;
+      padding: 5px;
+      display: flex;
+      gap: 3px;
+      transition: right 0.3s ease;
+    }
+
+    .toggle-btn {
+      background: transparent;
+      border: none;
+      color: var(--muted);
+      font-family: 'IBM Plex Sans', sans-serif;
+      font-size: 12.5px;
+      font-weight: 500;
+      padding: 8px 15px;
+      border-radius: 9px;
+      cursor: pointer;
+      transition: all 0.18s ease;
+      letter-spacing: 0.01em;
+      white-space: nowrap;
+    }
+
+    .toggle-btn.active {
+      background: rgba(255, 255, 255, 0.11);
+      color: #fff;
+    }
+
+    .toggle-btn:hover:not(.active) {
+      background: rgba(255, 255, 255, 0.06);
+      color: rgba(255,255,255,0.7);
+    }
+
+    /* ── STATS ────────────────────────────────────────────── */
+    #stats {
+      bottom: 32px; left: 20px;
+      padding: 16px 22px;
+      display: flex;
+      gap: 0;
+      align-items: stretch;
+    }
+
+    .stat {
+      padding: 0 20px;
+      text-align: center;
+    }
+    .stat:first-child { padding-left: 0; }
+    .stat:last-child  { padding-right: 0; }
+
+    .stat-value {
+      display: block;
+      font-family: 'Playfair Display', serif;
+      font-size: 26px;
+      font-weight: 700;
+      color: #fff;
+      line-height: 1;
+      margin-bottom: 5px;
+    }
+    .stat-value.accent { color: var(--accent); }
+
+    .stat-label {
+      font-size: 10.5px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    .stat-divider {
+      width: 1px;
+      background: var(--border);
+      margin: 2px 0;
+    }
+
+    /* ── ATTRIBUTION ──────────────────────────────────────── */
+    #attribution {
+      bottom: 32px; right: 20px;
+      padding: 10px 14px;
+      font-size: 11px;
+      color: var(--muted);
+      text-align: right;
+      line-height: 1.6;
+      transition: right 0.3s ease;
+    }
+    #attribution a { color: rgba(201, 168, 76, 0.7); text-decoration: none; }
+    #attribution a:hover { color: var(--accent); }
+
+    /* ── DETAIL PANEL ─────────────────────────────────────── */
+    #detail {
+      top: 20px; right: 20px;
+      bottom: 32px;
+      width: 296px;
+      padding: 20px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      display: none;
+      flex-direction: column;
+      gap: 0;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255,255,255,0.1) transparent;
+      transition: right 0.3s ease;
+    }
+    #detail.open { display: flex; }
+
+    #detail::-webkit-scrollbar { width: 4px; }
+    #detail::-webkit-scrollbar-track { background: transparent; }
+    #detail::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+
+    .detail-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 18px;
+    }
+
+    .detail-eyebrow {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+      margin-bottom: 5px;
+    }
+
+    .detail-title {
+      font-family: 'Playfair Display', serif;
+      font-size: 18px;
+      color: #fff;
+    }
+
+    .close-btn {
+      background: rgba(255,255,255,0.07);
+      border: none;
+      color: var(--muted);
+      border-radius: 8px;
+      width: 30px; height: 30px;
+      cursor: pointer;
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-left: 10px;
+      transition: all 0.15s;
+    }
+    .close-btn:hover { background: rgba(255,255,255,0.12); color: #fff; }
+
+    .detail-stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 18px;
+    }
+
+    .detail-stat-box {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+    }
+    .detail-stat-box.full { grid-column: span 2; }
+
+    .dsb-value {
+      font-size: 20px;
+      font-weight: 600;
+      color: #fff;
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+    .dsb-value.highlight { color: var(--accent); }
+
+    .dsb-label {
+      font-size: 10.5px;
+      color: var(--muted);
+    }
+
+    .commune-list-header {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .commune-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 7px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      gap: 10px;
+    }
+    .commune-row:last-child { border-bottom: none; }
+
+    .commune-name {
+      font-size: 13px;
+      color: rgba(255,255,255,0.78);
+      flex: 1;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .commune-pop {
+      font-size: 11.5px;
+      color: var(--muted);
+      flex-shrink: 0;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .viability-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      margin-top: 14px;
+    }
+    .badge-ok   { background: rgba(52, 199, 89, 0.12); color: #34c759; border: 1px solid rgba(52, 199, 89, 0.2); }
+    .badge-warn { background: rgba(255, 159, 10, 0.12); color: #ff9f0a; border: 1px solid rgba(255, 159, 10, 0.2); }
+    .badge-dot  { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+    /* ── TOOLTIP ──────────────────────────────────────────── */
+    #tooltip {
+      position: absolute;
+      background: rgba(10, 14, 23, 0.97);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 10px;
+      padding: 10px 13px;
+      pointer-events: none;
+      display: none;
+      font-size: 12.5px;
+      max-width: 230px;
+      z-index: 10;
+    }
+    .tt-name  { font-weight: 600; color: #fff; margin-bottom: 4px; }
+    .tt-line  { color: var(--muted); margin-top: 2px; }
+    .tt-pop   { color: var(--accent); font-weight: 500; }
+
+    /* ── LOADING ──────────────────────────────────────────── */
+    #loading {
+      position: fixed; inset: 0;
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      z-index: 999;
+      transition: opacity 0.6s ease;
+    }
+    #loading.fade-out { opacity: 0; pointer-events: none; }
+
+    .spinner {
+      width: 36px; height: 36px;
+      border: 2px solid rgba(255,255,255,0.08);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.75s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loading-label {
+      font-size: 13px;
+      color: var(--muted);
+      letter-spacing: 0.05em;
+    }
+
+    /* ── MAPLIBRE OVERRIDES ───────────────────────────────── */
+    .maplibregl-ctrl-bottom-right {
+      bottom: 80px !important;
+    }
+    .maplibregl-ctrl-attrib {
+      display: none;
+    }
+    .maplibregl-ctrl button {
+      background-color: var(--surface) !important;
+      color: var(--text) !important;
+      border: 1px solid var(--border) !important;
+    }
+  </style>
+</head>
+<body>
+
+<!-- LOADING SCREEN -->
+<div id="loading">
+  <div class="spinner"></div>
+  <span class="loading-label">Se încarcă harta României…</span>
+</div>
+
+<!-- MAP -->
+<div id="map"></div>
+
+<!-- HEADER CARD -->
+<div class="panel" id="header">
+  <div class="flag-bar">
+    <span class="ro-blue"></span>
+    <span class="ro-gold"></span>
+    <span class="ro-red"></span>
+    <em>Date oficiale · Recensământ 2021</em>
+  </div>
+  <h1>Reformă Administrativă</h1>
+  <p>
+    Propunere generată automat de unificare a comunelor cu
+    sub&nbsp;5.000&nbsp;de&nbsp;locuitori, pe baza datelor ANCPI și INS.
+    Apasă pe orice comună pentru detalii.
+  </p>
+</div>
+
+<!-- VIEW TOGGLE -->
+<div class="panel" id="view-toggle">
+  <button class="toggle-btn" id="btn-current" onclick="setView('current')">Situație actuală</button>
+  <button class="toggle-btn active" id="btn-proposed" onclick="setView('proposed')">Propunere 2024</button>
+</div>
+
+<!-- STATS BAR -->
+<div class="panel" id="stats">
+  <div class="stat">
+    <span class="stat-value" id="stat-main">1,333</span>
+    <span class="stat-label" id="stat-main-label">Unități propuse</span>
+  </div>
+  <div class="stat-divider"></div>
+  <div class="stat">
+    <span class="stat-value accent">−58%</span>
+    <span class="stat-label">Reducere</span>
+  </div>
+  <div class="stat-divider"></div>
+  <div class="stat">
+    <span class="stat-value">5,000</span>
+    <span class="stat-label">Prag min. loc.</span>
+  </div>
+</div>
+
+<!-- ATTRIBUTION -->
+<div class="panel" id="attribution">
+  Surse: <a href="https://geoportal.ancpi.ro" target="_blank">ANCPI</a> ·
+  <a href="https://insse.ro" target="_blank">INS</a> ·
+  Recensământ&nbsp;2021<br>
+  Algoritm: Max-P Regionalization
+</div>
+
+<!-- DETAIL PANEL -->
+<div class="panel" id="detail"></div>
+
+<!-- TOOLTIP -->
+<div id="tooltip"></div>
+
+<script>
+'use strict';
+
+// ── PALETTE ────────────────────────────────────────────────────────────────
+const PALETTE = [
+  '#E63946','#FF6B35','#F7B731','#78C13F','#00B4A6',
+  '#4DACD6','#5E60CE','#9B5DE5','#F15BB5','#FEE440',
+  '#00BBF9','#00F5D4','#FB5607','#FF006E','#8338EC',
+  '#3A86FF','#06D6A0','#FFD166','#EF476F','#118AB2',
+];
+
+function paletteColor(id) {
+  // Multiplicative hash for better distribution between adjacent regions
+  return PALETTE[((id * 2654435761) >>> 0) % PALETTE.length];
+}
+
+const COUNTY_PALETTE = [
+  '#e63946','#f4a261','#e9c46a','#2a9d8f','#264653',
+  '#457b9d','#a8dadc','#606c38','#dda15e','#bc6c25',
+  '#6a4c93','#1982c4','#8ac926','#ff595e','#ffca3a',
+  '#6a0572','#0d3b66','#c77dff','#f95738','#3d405b',
+  '#48cae4','#023e8a','#f72585','#b5838d','#6d6875',
+  '#a7c957','#386641','#6a994e','#bc4749','#606c38',
+  '#e9c46a','#f4a261','#e76f51','#264653','#2a9d8f',
+  '#457b9d','#1d3557','#e63946','#f1faee','#a8dadc',
+  '#4361ee','#480ca8',
+];
+
+const countyColorMap = {};
+let countyIdx = 0;
+function getCountyColor(judet) {
+  if (!countyColorMap[judet]) {
+    countyColorMap[judet] = COUNTY_PALETTE[countyIdx++ % COUNTY_PALETTE.length];
+  }
+  return countyColorMap[judet];
+}
+
+// ── STATE ──────────────────────────────────────────────────────────────────
+let geoData = null;
+let currentView = 'proposed';
+let hoveredId = null;
+
+// ── MAP INIT ───────────────────────────────────────────────────────────────
+const map = new maplibregl.Map({
+  container: 'map',
+  style: 'https://basemaps.cartocdn.com/gl/dark-matter-nolabels-gl-style/style.json',
+  center: [25.1, 45.85],
+  zoom: 6.4,
+  minZoom: 5,
+  maxZoom: 14,
+  attributionControl: false,
+});
+
+map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
+
+// ── DATA LOAD ──────────────────────────────────────────────────────────────
+map.on('load', async () => {
+  let data;
+  try {
+    const res = await fetch('./maxp_result.geojson');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    data = await res.json();
+  } catch (err) {
+    document.getElementById('loading').innerHTML = `
+      <div style="text-align:center;padding:40px;max-width:400px">
+        <div style="font-size:32px;margin-bottom:16px">⚠️</div>
+        <div style="color:#fff;font-size:16px;margin-bottom:8px">Nu s-a putut încărca fișierul de date</div>
+        <div style="color:rgba(255,255,255,0.4);font-size:13px;line-height:1.6">
+          Asigurați-vă că <code style="background:rgba(255,255,255,0.1);padding:2px 6px;border-radius:4px">maxp_result.geojson</code>
+          se află în același director cu <code style="background:rgba(255,255,255,0.1);padding:2px 6px;border-radius:4px">index.html</code>
+          și că serviți fișierele cu un server local
+          (<code style="background:rgba(255,255,255,0.1);padding:2px 6px;border-radius:4px">python -m http.server 8080</code>).
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  geoData = data;
+
+  // Pre-compute display colors on each feature
+  geoData.features.forEach(f => {
+    const p = f.properties;
+    p._region_color = paletteColor(p.region_id);
+    p._county_color = getCountyColor(p.judet);
+    p._display_color = p._region_color; // initial view = proposed
+  });
+
+  map.addSource('communes', {
+    type: 'geojson',
+    data: geoData,
+    generateId: true,
+  });
+
+  // Fill: proposed regions (colored by region)
+  map.addLayer({
+    id: 'fills',
+    type: 'fill',
+    source: 'communes',
+    paint: {
+      'fill-color': ['get', '_display_color'],
+      'fill-opacity': [
+        'case',
+        ['boolean', ['feature-state', 'hover'], false], 0.88,
+        0.68
+      ],
+    },
+  });
+
+  // Thin commune borders
+  map.addLayer({
+    id: 'borders',
+    type: 'line',
+    source: 'communes',
+    paint: {
+      'line-color': 'rgba(0,0,0,0.35)',
+      'line-width': 0.5,
+    },
+  });
+
+  // Highlight: region on hover
+  map.addLayer({
+    id: 'hover-outline',
+    type: 'line',
+    source: 'communes',
+    paint: {
+      'line-color': '#ffffff',
+      'line-width': ['case', ['boolean', ['feature-state', 'hover'], false], 1.5, 0],
+    },
+  });
+
+  // Selected region highlight
+  map.addLayer({
+    id: 'selected-fill',
+    type: 'fill',
+    source: 'communes',
+    paint: {
+      'fill-color': '#fff',
+      'fill-opacity': ['case', ['boolean', ['feature-state', 'selected'], false], 0.08, 0],
+    },
+  });
+
+  setupInteractions();
+  hideLoading();
+});
+
+// ── LOADING ────────────────────────────────────────────────────────────────
+function hideLoading() {
+  const el = document.getElementById('loading');
+  el.classList.add('fade-out');
+  setTimeout(() => el.remove(), 700);
+}
+
+// ── INTERACTIONS ───────────────────────────────────────────────────────────
+const tooltip = document.getElementById('tooltip');
+const selectedFeatureIds = new Set();
+
+function setupInteractions() {
+  map.on('mousemove', 'fills', (e) => {
+    if (!e.features.length) return;
+    const f = e.features[0];
+    const p = f.properties;
+
+    if (hoveredId !== null && hoveredId !== f.id) {
+      map.setFeatureState({ source: 'communes', id: hoveredId }, { hover: false });
+    }
+    hoveredId = f.id;
+    map.setFeatureState({ source: 'communes', id: hoveredId }, { hover: true });
+
+    // Position tooltip
+    const x = e.point.x, y = e.point.y;
+    const offsetX = x > window.innerWidth - 260 ? -240 : 16;
+    const offsetY = y > window.innerHeight - 100 ? -90 : -10;
+    tooltip.style.left = (x + offsetX) + 'px';
+    tooltip.style.top  = (y + offsetY) + 'px';
+    tooltip.style.display = 'block';
+
+    if (currentView === 'proposed') {
+      const nUats = Number(p.region_n_uats);
+      tooltip.innerHTML = `
+        <div class="tt-name">${p.denumire}</div>
+        <div class="tt-line">${p.judet}</div>
+        <div class="tt-line">Populație comună: <span class="tt-pop">${fmt(p.populatie)}</span></div>
+        ${nUats > 1 ? `<div class="tt-line">Unitate propusă: <span class="tt-pop">${fmt(p.region_pop)} loc.</span> · ${nUats} comune</div>` : ''}
+      `;
+    } else {
+      tooltip.innerHTML = `
+        <div class="tt-name">${p.denumire}</div>
+        <div class="tt-line">${p.judet} · ${p.natLevName || 'Comună'}</div>
+        <div class="tt-line">Populație: <span class="tt-pop">${fmt(p.populatie)}</span></div>
+        <div class="tt-line">Suprafață: ${fmt(Math.round(p.aria_km2))} km²</div>
+      `;
+    }
+
+    map.getCanvas().style.cursor = 'pointer';
+  });
+
+  map.on('mouseleave', 'fills', () => {
+    if (hoveredId !== null) {
+      map.setFeatureState({ source: 'communes', id: hoveredId }, { hover: false });
+      hoveredId = null;
+    }
+    tooltip.style.display = 'none';
+    map.getCanvas().style.cursor = '';
+  });
+
+  map.on('click', 'fills', (e) => {
+    if (!e.features.length) return;
+    showDetail(e.features[0].properties);
+  });
+
+  map.on('click', (e) => {
+    const hits = map.queryRenderedFeatures(e.point, { layers: ['fills'] });
+    if (!hits.length) closeDetail();
+  });
+}
+
+// ── DETAIL PANEL ───────────────────────────────────────────────────────────
+function showDetail(props) {
+  const regionId = props.region_id;
+
+  // Find all communes in the same region
+  const members = geoData.features
+    .filter(f => f.properties.region_id === regionId)
+    .map(f => f.properties)
+    .sort((a, b) => b.populatie - a.populatie);
+
+  const nUats = members.length;
+  const regionPop  = Number(props.region_pop);
+  const regionArea = Math.round(props.region_area_km2);
+  const density    = Math.round(regionPop / regionArea);
+  const viable     = props.region_viable === 1 || props.region_viable === '1';
+
+  // Badge
+  const badge = viable
+    ? `<div class="viability-badge badge-ok"><span class="badge-dot"></span> Prag minim atins</div>`
+    : `<div class="viability-badge badge-warn"><span class="badge-dot"></span> Sub pragul minim</div>`;
+
+  // Commune list
+  const listRows = members.map(m => `
+    <div class="commune-row">
+      <span class="commune-name" title="${m.denumire}">${m.denumire}</span>
+      <span class="commune-pop">${fmt(m.populatie)}</span>
+    </div>
+  `).join('');
+
+  const title = nUats === 1
+    ? `${members[0].denumire} <small style="font-size:14px;opacity:.5">(nesupus unirii)</small>`
+    : (nUats <= 3
+      ? members.map(m => m.denumire).join(' + ')
+      : `Unitate #${regionId}`);
+
+  const panel = document.getElementById('detail');
+  panel.innerHTML = `
+    <div class="detail-header">
+      <div>
+        <div class="detail-eyebrow">${nUats > 1 ? `Unitate propusă · ${props.judet}` : props.judet}</div>
+        <div class="detail-title">${title}</div>
+      </div>
+      <button class="close-btn" onclick="closeDetail()">✕</button>
+    </div>
+
+    <div class="detail-stats-grid">
+      <div class="detail-stat-box">
+        <div class="dsb-value highlight">${fmt(regionPop)}</div>
+        <div class="dsb-label">Locuitori totali</div>
+      </div>
+      <div class="detail-stat-box">
+        <div class="dsb-value">${fmt(regionArea)}</div>
+        <div class="dsb-label">km²</div>
+      </div>
+      <div class="detail-stat-box">
+        <div class="dsb-value">${nUats}</div>
+        <div class="dsb-label">${nUats === 1 ? 'comună' : 'comune unite'}</div>
+      </div>
+      <div class="detail-stat-box">
+        <div class="dsb-value">${density}</div>
+        <div class="dsb-label">loc./km²</div>
+      </div>
+    </div>
+
+    ${badge}
+
+    ${nUats > 1 ? `
+      <div class="commune-list-header" style="margin-top:18px">Componență</div>
+      ${listRows}
+    ` : ''}
+  `;
+
+  panel.classList.add('open');
+  // Shift toggle and attribution
+  document.getElementById('view-toggle').style.right = '332px';
+  document.getElementById('attribution').style.right = '332px';
+}
+
+function closeDetail() {
+  const panel = document.getElementById('detail');
+  panel.classList.remove('open');
+  document.getElementById('view-toggle').style.right = '20px';
+  document.getElementById('attribution').style.right = '20px';
+}
+
+// ── VIEW TOGGLE ────────────────────────────────────────────────────────────
+function setView(v) {
+  currentView = v;
+  document.getElementById('btn-current').classList.toggle('active', v === 'current');
+  document.getElementById('btn-proposed').classList.toggle('active', v === 'proposed');
+
+  geoData.features.forEach(f => {
+    f.properties._display_color = v === 'proposed'
+      ? f.properties._region_color
+      : f.properties._county_color;
+  });
+  map.getSource('communes').setData(geoData);
+
+  const statMain = document.getElementById('stat-main');
+  const statLabel = document.getElementById('stat-main-label');
+  if (v === 'current') {
+    statMain.textContent = '3,186';
+    statLabel.textContent = 'Comune actuale';
+    statMain.classList.remove('accent');
+  } else {
+    statMain.textContent = '1,333';
+    statLabel.textContent = 'Unități propuse';
+    statMain.classList.add('accent');
+  }
+
+  closeDetail();
+}
+
+// ── UTIL ───────────────────────────────────────────────────────────────────
+function fmt(n) {
+  return Number(n).toLocaleString('ro-RO');
+}
+</script>
+</body>
+</html>
