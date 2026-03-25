@@ -1,0 +1,2705 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Reformă Administrativă — România</title>
+  <meta name="description" content="Propunere de reorganizare administrativă a comunelor din România bazată pe date din Recensământul 2021." />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&display=swap" rel="stylesheet">
+  <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
+  <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg: #0a0e17;
+      --surface: rgba(10, 14, 23, 0.88);
+      --border: rgba(255, 255, 255, 0.08);
+      --text: #e8edf5;
+      --muted: rgba(232, 237, 245, 0.38);
+      --accent: #c9a84c;
+      --red: #ce2939;
+      --blue: #003DA5;
+      --radius: 14px;
+      --mono: 'IBM Plex Mono', monospace;
+    }
+
+    html, body {
+      width: 100%; height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'IBM Plex Sans', sans-serif;
+      overflow: hidden;
+    }
+
+    #map { width: 100vw; height: 100vh; }
+
+    /* ── FLOATING PANELS ──────────────────────────────────── */
+    .panel {
+      position: absolute;
+      background: var(--surface);
+      backdrop-filter: blur(20px) saturate(1.4);
+      -webkit-backdrop-filter: blur(20px) saturate(1.4);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+
+    /* ── HEADER ───────────────────────────────────────────── */
+    #header {
+      top: 20px; left: 20px;
+      padding: 20px 22px;
+      max-width: 320px;
+    }
+
+    .flag-bar {
+      display: flex;
+      gap: 3px;
+      margin-bottom: 14px;
+      align-items: center;
+    }
+    .flag-bar span {
+      height: 3px; width: 24px;
+      border-radius: 2px;
+    }
+    .flag-bar .ro-blue  { background: var(--blue); }
+    .flag-bar .ro-gold  { background: var(--accent); }
+    .flag-bar .ro-red   { background: var(--red); }
+    .flag-bar em {
+      font-style: normal;
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-left: 8px;
+    }
+
+    #header h1 {
+      font-family: 'Playfair Display', serif;
+      font-size: 21px;
+      font-weight: 700;
+      color: #fff;
+      line-height: 1.2;
+      margin-bottom: 8px;
+    }
+
+    #header p {
+      font-size: 12.5px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    /* ── TOGGLE ───────────────────────────────────────────── */
+    #view-toggle {
+      top: 20px; right: 20px;
+      padding: 5px;
+      display: flex;
+      gap: 3px;
+      align-items: center;
+      transition: right 0.3s ease;
+    }
+
+    .toggle-btn {
+      background: transparent;
+      border: none;
+      color: var(--muted);
+      font-family: 'IBM Plex Sans', sans-serif;
+      font-size: 12.5px;
+      font-weight: 500;
+      padding: 8px 15px;
+      border-radius: 9px;
+      cursor: pointer;
+      transition: all 0.18s ease;
+      letter-spacing: 0.01em;
+      white-space: nowrap;
+    }
+
+    .toggle-btn.active {
+      background: rgba(255, 255, 255, 0.11);
+      color: #fff;
+    }
+
+    .toggle-btn:hover:not(.active) {
+      background: rgba(255, 255, 255, 0.06);
+      color: rgba(255,255,255,0.7);
+    }
+
+    .toggle-divider {
+      width: 1px;
+      height: 18px;
+      background: var(--border);
+      margin: 0 2px;
+      flex-shrink: 0;
+    }
+
+    /* Edit button distinct active state */
+    #btn-edit.active {
+      background: rgba(201, 168, 76, 0.18);
+      color: var(--accent);
+    }
+
+    /* ── STATS ────────────────────────────────────────────── */
+    #stats {
+      bottom: 32px; left: 20px;
+      transition: opacity 0.2s;
+      padding: 16px 22px;
+      display: flex;
+      gap: 0;
+      align-items: stretch;
+    }
+
+    .stat {
+      padding: 0 20px;
+      text-align: center;
+    }
+    .stat:first-child { padding-left: 0; }
+    .stat:last-child  { padding-right: 0; }
+
+    .stat-value {
+      display: block;
+      font-family: 'Playfair Display', serif;
+      font-size: 26px;
+      font-weight: 700;
+      color: #fff;
+      line-height: 1;
+      margin-bottom: 5px;
+    }
+    .stat-value.accent { color: var(--accent); }
+
+    .stat-label {
+      font-size: 10.5px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    .stat-divider {
+      width: 1px;
+      background: var(--border);
+      margin: 2px 0;
+    }
+
+    /* ── ATTRIBUTION ──────────────────────────────────────── */
+    #attribution {
+      bottom: 32px; right: 20px;
+      padding: 10px 14px;
+      font-size: 11px;
+      color: var(--muted);
+      text-align: right;
+      line-height: 1.6;
+      transition: right 0.3s ease;
+    }
+    #attribution a { color: rgba(201, 168, 76, 0.7); text-decoration: none; }
+    #attribution a:hover { color: var(--accent); }
+
+    /* ── SIDE PANELS (detail + edit) ──────────────────────── */
+    #detail, #edit-panel {
+      top: 20px; right: 20px;
+      bottom: 32px;
+      width: 296px;
+      padding: 20px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      display: none;
+      flex-direction: column;
+      gap: 0;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255,255,255,0.1) transparent;
+      transition: right 0.3s ease;
+    }
+    #detail.open, #edit-panel.open { display: flex; }
+
+    #detail::-webkit-scrollbar,
+    #edit-panel::-webkit-scrollbar { width: 4px; }
+    #detail::-webkit-scrollbar-track,
+    #edit-panel::-webkit-scrollbar-track { background: transparent; }
+    #detail::-webkit-scrollbar-thumb,
+    #edit-panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+
+    .detail-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 18px;
+    }
+
+    .detail-eyebrow {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+      margin-bottom: 5px;
+    }
+
+    .detail-title {
+      font-family: 'Playfair Display', serif;
+      font-size: 18px;
+      color: #fff;
+    }
+
+    .close-btn {
+      background: rgba(255,255,255,0.07);
+      border: none;
+      color: var(--muted);
+      border-radius: 8px;
+      width: 30px; height: 30px;
+      cursor: pointer;
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-left: 10px;
+      transition: all 0.15s;
+    }
+    .close-btn:hover { background: rgba(255,255,255,0.12); color: #fff; }
+
+    .detail-stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 18px;
+    }
+
+    .detail-stat-box {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+    }
+    .detail-stat-box.full { grid-column: span 2; }
+
+    .dsb-value {
+      font-size: 20px;
+      font-weight: 600;
+      color: #fff;
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+    .dsb-value.highlight { color: var(--accent); }
+
+    .dsb-label {
+      font-size: 10.5px;
+      color: var(--muted);
+    }
+
+    .commune-list-header {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .commune-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 7px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      gap: 10px;
+    }
+    .commune-row:last-child { border-bottom: none; }
+
+    .commune-name {
+      font-size: 13px;
+      color: rgba(255,255,255,0.78);
+      flex: 1;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .commune-pop {
+      font-size: 11.5px;
+      color: var(--muted);
+      flex-shrink: 0;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .viability-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      margin-top: 14px;
+    }
+    .badge-ok   { background: rgba(52, 199, 89, 0.12); color: #34c759; border: 1px solid rgba(52, 199, 89, 0.2); }
+    .badge-warn { background: rgba(255, 159, 10, 0.12); color: #ff9f0a; border: 1px solid rgba(255, 159, 10, 0.2); }
+    .badge-dot  { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+    /* ── TOOLTIP ──────────────────────────────────────────── */
+    #tooltip {
+      position: absolute;
+      background: rgba(10, 14, 23, 0.97);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 10px;
+      padding: 10px 13px;
+      pointer-events: none;
+      display: none;
+      font-size: 12.5px;
+      max-width: 230px;
+      z-index: 10;
+    }
+    .tt-name  { font-weight: 600; color: #fff; margin-bottom: 4px; }
+    .tt-line  { color: var(--muted); margin-top: 2px; }
+    .tt-pop   { color: var(--accent); font-weight: 500; }
+    .tt-selected { color: #34c759; font-weight: 500; margin-top: 2px; }
+
+    /* ── LOADING ──────────────────────────────────────────── */
+    #loading {
+      position: fixed; inset: 0;
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      z-index: 999;
+      transition: opacity 0.6s ease;
+    }
+    #loading.fade-out { opacity: 0; pointer-events: none; }
+
+    .spinner {
+      width: 36px; height: 36px;
+      border: 2px solid rgba(255,255,255,0.08);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.75s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loading-label {
+      font-size: 13px;
+      color: var(--muted);
+      letter-spacing: 0.05em;
+    }
+
+/* ── ROAD TOGGLE ──────────────────────────────────────── */
+    .toggle-separator {
+      width: 1px;
+      background: var(--border);
+      margin: 6px 2px;
+      flex-shrink: 0;
+    }
+
+    .toggle-btn.road-active {
+      background: rgba(201, 168, 76, 0.15);
+      color: var(--accent);
+      border: 1px solid rgba(201, 168, 76, 0.25);
+    }
+
+    /* ── ZOOM HINT TOAST ──────────────────────────────────── */
+    #zoom-hint {
+      position: absolute;
+      bottom: 90px;
+      left: 50%;
+      transform: translateX(-50%) translateY(10px);
+      background: rgba(10, 14, 23, 0.95);
+      border: 1px solid rgba(201, 168, 76, 0.3);
+      border-radius: 8px;
+      padding: 9px 16px;
+      font-size: 12px;
+      color: var(--accent);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.25s ease, transform 0.25s ease;
+      white-space: nowrap;
+      z-index: 10;
+    }
+    #zoom-hint.visible {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* ── ROAD LEGEND ──────────────────────────────────────── */
+    #road-legend {
+      position: absolute;
+      bottom: 90px;
+      left: 20px;
+      background: var(--surface);
+      backdrop-filter: blur(20px) saturate(1.4);
+      -webkit-backdrop-filter: blur(20px) saturate(1.4);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 14px;
+      display: none;
+      flex-direction: column;
+      gap: 7px;
+      z-index: 5;
+    }
+    #road-legend.visible { display: flex; }
+
+    .road-legend-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .rleg-line {
+      width: 28px;
+      height: 3px;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+    .rleg-line.motorway { background: #c9a84c; height: 4px; }
+    .rleg-line.primary  { background: rgba(255,255,255,0.75); }
+    .rleg-line.secondary{ background: rgba(255,255,255,0.32); height: 2px; }
+
+    /* ── MAPLIBRE OVERRIDES ───────────────────────────────── */
+    .maplibregl-ctrl-bottom-right {
+      bottom: 80px !important;
+    }
+    .maplibregl-ctrl-attrib {
+      display: none;
+    }
+    .maplibregl-ctrl button {
+      background-color: var(--surface) !important;
+      color: var(--text) !important;
+      border: 1px solid var(--border) !important;
+    }
+
+    /* ── EDIT PANEL STYLES ────────────────────────────────── */
+    .edit-hint {
+      font-size: 12.5px;
+      color: var(--muted);
+      line-height: 1.65;
+      margin-bottom: 16px;
+    }
+
+    .edit-selection-box {
+      background: rgba(201, 168, 76, 0.07);
+      border: 1px solid rgba(201, 168, 76, 0.22);
+      border-radius: 10px;
+      padding: 14px;
+      margin-bottom: 14px;
+    }
+
+    .edit-sel-count {
+      font-family: 'Playfair Display', serif;
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--accent);
+      line-height: 1;
+      margin-bottom: 3px;
+    }
+
+    .edit-sel-sublabel {
+      font-size: 10.5px;
+      color: rgba(232, 237, 245, 0.45);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 8px;
+    }
+
+    .edit-sel-pop {
+      font-size: 13px;
+      color: rgba(255,255,255,0.6);
+    }
+
+    .edit-action-btn {
+      width: 100%;
+      padding: 10px 16px;
+      border-radius: 10px;
+      font-family: 'IBM Plex Sans', sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      margin-bottom: 7px;
+      transition: all 0.15s;
+      text-align: center;
+      display: block;
+    }
+
+    .btn-merge {
+      background: rgba(201, 168, 76, 0.15);
+      color: var(--accent);
+      border: 1px solid rgba(201, 168, 76, 0.35);
+    }
+    .btn-merge:hover { background: rgba(201, 168, 76, 0.26); }
+    .btn-merge:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+
+    .btn-secondary {
+      background: rgba(255,255,255,0.05);
+      color: rgba(232, 237, 245, 0.55);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover {
+      background: rgba(255,255,255,0.09);
+      color: var(--text);
+    }
+
+    .btn-danger {
+      background: rgba(206, 41, 57, 0.08);
+      color: rgba(206, 41, 57, 0.75);
+      border: 1px solid rgba(206, 41, 57, 0.2);
+    }
+    .btn-danger:hover {
+      background: rgba(206, 41, 57, 0.15);
+      color: #e04a5a;
+    }
+
+    .edit-section-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+      margin-bottom: 10px;
+      margin-top: 20px;
+    }
+
+    .edit-group-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 9px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    .edit-group-item:last-child { border-bottom: none; }
+
+    .edit-group-swatch {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      margin-top: 3px;
+    }
+
+    .edit-group-details { flex: 1; min-width: 0; }
+
+    .edit-group-name {
+      font-size: 12.5px;
+      color: rgba(255,255,255,0.75);
+      margin-bottom: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .edit-group-meta {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .edit-group-remove {
+      background: none;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 14px;
+      padding: 2px 4px;
+      border-radius: 4px;
+      flex-shrink: 0;
+      transition: all 0.12s;
+      line-height: 1;
+    }
+    .edit-group-remove:hover { color: #e04a5a; background: rgba(206,41,57,0.1); }
+
+    .edit-empty-state {
+      margin-top: 12px;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.7;
+      padding: 14px;
+      border: 1px dashed rgba(255,255,255,0.1);
+      border-radius: 10px;
+      text-align: center;
+    }
+
+    .edit-divider {
+      height: 1px;
+      background: var(--border);
+      margin: 16px 0;
+    }
+
+    /* ── FINANCIAL METRICS ────────────────────────────────────── */
+    .fin-section {
+      margin-top: 18px;
+      padding-top: 14px;
+      border-top: 1px solid var(--border);
+    }
+
+    .fin-section-title {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    .fin-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 3px 0;
+      gap: 8px;
+    }
+
+    .fin-label {
+      font-size: 11.5px;
+      color: rgba(232, 237, 245, 0.55);
+      flex: 1;
+      min-width: 0;
+    }
+
+    .fin-value {
+      font-size: 12.5px;
+      color: var(--text);
+      font-weight: 500;
+      text-align: right;
+      flex-shrink: 0;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .fin-bar-wrap {
+      height: 3px;
+      background: rgba(255,255,255,0.07);
+      border-radius: 2px;
+      margin: 2px 0 7px 0;
+      overflow: hidden;
+    }
+
+    .fin-bar {
+      height: 100%;
+      border-radius: 2px;
+      transition: width 0.4s ease;
+    }
+
+    .fin-badge {
+      display: inline-block;
+      font-size: 9.5px;
+      padding: 1px 6px;
+      border-radius: 10px;
+      margin-left: 5px;
+      vertical-align: middle;
+      font-weight: 500;
+    }
+    .fin-badge-ok   { background: rgba(52, 199, 89, 0.12);  color: #34c759; }
+    .fin-badge-warn { background: rgba(255, 159, 10, 0.12); color: #ff9f0a; }
+    .fin-badge-bad  { background: rgba(206, 41, 57, 0.12);  color: #e04a5a; }
+
+    .fin-saving-box {
+      background: rgba(52, 199, 89, 0.08);
+      border: 1px solid rgba(52, 199, 89, 0.2);
+      border-radius: 10px;
+      padding: 12px;
+      margin-top: 10px;
+    }
+    .fin-saving-amount {
+      font-size: 19px;
+      font-weight: 600;
+      color: #34c759;
+      line-height: 1;
+      margin-bottom: 3px;
+    }
+    .fin-saving-label {
+      font-size: 11px;
+      color: rgba(52, 199, 89, 0.65);
+    }
+
+    .fin-cost-box {
+      background: rgba(206, 41, 57, 0.08);
+      border: 1px solid rgba(206, 41, 57, 0.2);
+      border-radius: 10px;
+      padding: 12px;
+      margin-top: 10px;
+    }
+    .fin-cost-amount {
+      font-size: 19px;
+      font-weight: 600;
+      color: #e04a5a;
+      line-height: 1;
+      margin-bottom: 3px;
+    }
+    .fin-cost-label {
+      font-size: 11px;
+      color: rgba(206, 41, 57, 0.65);
+    }
+
+    .fin-missing-note {
+      font-size: 10.5px;
+      color: var(--muted);
+      margin-top: 8px;
+      font-style: italic;
+    }
+
+    /* ── INEFFICIENCY LEGEND ─────────────────────────────────── */
+    #ineff-legend {
+      position: absolute;
+      bottom: 110px; left: 20px;
+      padding: 12px 16px;
+      background: var(--surface);
+      backdrop-filter: blur(20px) saturate(1.4);
+      -webkit-backdrop-filter: blur(20px) saturate(1.4);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      display: none;
+      flex-direction: column;
+      gap: 7px;
+      z-index: 5;
+    }
+    #ineff-legend.visible { display: flex; }
+
+    .legend-title {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      margin-bottom: 2px;
+    }
+
+    .legend-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11.5px;
+      color: rgba(232, 237, 245, 0.65);
+    }
+
+    .legend-swatch {
+      width: 12px; height: 12px;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+    
+    /* ── GUIDE MODAL ─────────────────────────────────────────── */
+    #guide-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0, 0, 0, 0.72);
+      z-index: 900;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    #guide-overlay.open { display: flex; }
+
+    #guide-modal {
+      background: #0f1520;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 18px;
+      width: 100%;
+      max-width: 680px;
+      max-height: 85vh;
+      overflow-y: auto;
+      padding: 36px 40px 40px;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255,255,255,0.1) transparent;
+      position: relative;
+    }
+    #guide-modal::-webkit-scrollbar { width: 4px; }
+    #guide-modal::-webkit-scrollbar-track { background: transparent; }
+    #guide-modal::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+
+    .guide-close {
+      position: absolute;
+      top: 18px; right: 18px;
+      background: rgba(255,255,255,0.07);
+      border: none;
+      color: rgba(232,237,245,0.5);
+      border-radius: 8px;
+      width: 30px; height: 30px;
+      cursor: pointer;
+      font-size: 18px;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.15s;
+    }
+    .guide-close:hover { background: rgba(255,255,255,0.12); color: #fff; }
+
+    .guide-flag {
+      display: flex; gap: 3px; align-items: center;
+      margin-bottom: 18px;
+    }
+    .guide-flag span { height: 3px; width: 24px; border-radius: 2px; }
+    .guide-flag .gf-blue  { background: #003DA5; }
+    .guide-flag .gf-gold  { background: #c9a84c; }
+    .guide-flag .gf-red   { background: #ce2939; }
+
+    .guide-title {
+      font-family: 'Playfair Display', serif;
+      font-size: 24px;
+      font-weight: 700;
+      color: #fff;
+      line-height: 1.2;
+      margin-bottom: 6px;
+    }
+    .guide-subtitle {
+      font-size: 13px;
+      color: rgba(232,237,245,0.4);
+      margin-bottom: 32px;
+    }
+
+    .guide-section {
+      margin-bottom: 28px;
+    }
+    .guide-section-title {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: #c9a84c;
+      margin-bottom: 10px;
+    }
+    .guide-section p {
+      font-size: 13.5px;
+      color: rgba(232,237,245,0.72);
+      line-height: 1.75;
+      margin-bottom: 10px;
+    }
+    .guide-section p:last-child { margin-bottom: 0; }
+
+    .guide-metric-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    @media (max-width: 520px) {
+      .guide-metric-grid { grid-template-columns: 1fr; }
+      #guide-modal { padding: 24px 20px 28px; }
+    }
+
+    .guide-metric-box {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 10px;
+      padding: 13px 15px;
+    }
+    .guide-metric-name {
+      font-size: 11.5px;
+      font-weight: 500;
+      color: rgba(232,237,245,0.85);
+      margin-bottom: 4px;
+      font-family: 'IBM Plex Mono', monospace;
+    }
+    .guide-metric-desc {
+      font-size: 11.5px;
+      color: rgba(232,237,245,0.45);
+      line-height: 1.55;
+    }
+
+    .guide-divider {
+      height: 1px;
+      background: rgba(255,255,255,0.07);
+      margin: 28px 0;
+    }
+
+    .guide-source-row {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      margin-bottom: 8px;
+      font-size: 12.5px;
+      color: rgba(232,237,245,0.5);
+    }
+    .guide-source-dot {
+      width: 5px; height: 5px;
+      border-radius: 50%;
+      background: #c9a84c;
+      flex-shrink: 0;
+      margin-top: 7px;
+    }
+    .guide-source-row a {
+      color: rgba(201,168,76,0.7);
+      text-decoration: none;
+    }
+    .guide-source-row a:hover { color: #c9a84c; }
+
+    .guide-legend-row {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 7px;
+      font-size: 12.5px;
+      color: rgba(232,237,245,0.6);
+    }
+    .guide-legend-swatch {
+      width: 14px; height: 14px;
+      border-radius: 3px; flex-shrink: 0;
+    }
+
+    /* ? button in toggle */
+    #btn-guide {
+      font-size: 13px;
+      font-weight: 600;
+      width: 30px;
+      padding: 8px 0;
+      text-align: center;
+    }
+
+    /* ── MOBILE ───────────────────────────────────────────── */
+    @media (max-width: 640px) {
+
+      /* Header — compact, hide description */
+      #header {
+        top: 10px; left: 10px;
+        padding: 10px 13px;
+        max-width: calc(100vw - 20px);
+      }
+      #header h1 { font-size: 15px; margin-bottom: 0; }
+      #header p  { display: none; }
+      .flag-bar  { margin-bottom: 7px; }
+
+      /* Toggle — move to bottom-center, make scrollable */
+      #view-toggle {
+        top: auto !important;
+        bottom: 80px;
+        left: 50% !important;
+        right: auto !important;
+        transform: translateX(-50%);
+        max-width: calc(100vw - 16px);
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        flex-wrap: nowrap;
+        padding: 4px 6px;
+      }
+      #view-toggle::-webkit-scrollbar { display: none; }
+
+      .toggle-btn {
+        font-size: 11.5px;
+        padding: 7px 11px;
+        white-space: nowrap;
+        flex-shrink: 0;
+      }
+      #btn-guide {
+        width: 26px;
+        padding: 7px 0;
+      }
+
+      /* Stats — hidden on mobile */
+      #stats { display: none; }
+
+      /* Attribution — hidden on mobile */
+      #attribution { display: none; }
+
+      /* Detail and Edit panels — full-width bottom sheet */
+      #detail, #edit-panel {
+        top: auto !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        width: 100% !important;
+        max-height: 55vh;
+        border-radius: var(--radius) var(--radius) 0 0;
+        border-bottom: none;
+        padding: 16px 16px 24px;
+      }
+
+      /* Inefficiency legend — hidden on mobile (overlaps side panel) */
+      #ineff-legend { display: none !important; }
+
+      /* Road legend — move above toggle */
+      #road-legend {
+        bottom: 155px;
+        left: 10px;
+        padding: 8px 11px;
+        gap: 5px;
+      }
+      .road-legend-row { font-size: 10.5px; }
+
+      /* Zoom hint — move above toggle */
+      #zoom-hint { bottom: 165px; }
+
+      /* MapLibre controls — move above toggle */
+      .maplibregl-ctrl-bottom-right {
+        bottom: 145px !important;
+        right: 10px !important;
+      }
+
+      /* Guide modal — full-screen on mobile */
+      #guide-overlay { padding: 0; align-items: flex-end; }
+      #guide-modal {
+        max-height: 90vh;
+        border-radius: 18px 18px 0 0;
+        padding: 24px 18px 28px;
+        max-width: 100%;
+      }
+    }
+
+  </style>
+</head>
+<body>
+
+<!-- LOADING SCREEN -->
+<div id="loading">
+  <div class="spinner"></div>
+  <span class="loading-label">Se încarcă harta României…</span>
+</div>
+
+<!-- MAP -->
+<div id="map"></div>
+
+<!-- HEADER CARD -->
+<div class="panel" id="header">
+  <div class="flag-bar">
+    <span class="ro-blue"></span>
+    <span class="ro-gold"></span>
+    <span class="ro-red"></span>
+    <em>Date oficiale · Recensământ 2021</em>
+  </div>
+  <h1>Reformă Administrativă</h1>
+  <p>
+    Propunere generată automat de unificare a comunelor cu
+    sub&nbsp;5.000&nbsp;de&nbsp;locuitori, pe baza datelor ANCPI și INS.
+    Apasă pe orice comună pentru detalii.
+  </p>
+</div>
+
+<!-- VIEW TOGGLE -->
+<div class="panel" id="view-toggle">
+  <button class="toggle-btn" id="btn-current" onclick="setView('current')">Situație actuală</button>
+  <div class="toggle-divider"></div>
+  <button class="toggle-btn" id="btn-edit" onclick="toggleEditMode()">✏ Editează</button>
+  <div class="toggle-divider"></div>
+  <button class="toggle-btn active" id="btn-proposed" onclick="setView('proposed')">Propunere reformă</button>
+  <div class="toggle-divider"></div>
+  <button class="toggle-btn" id="btn-roads" onclick="toggleRoads()">Drumuri</button>
+  <div class="toggle-divider"></div>
+  <button class="toggle-btn" id="btn-guide" onclick="openGuide()">?</button>
+</div>
+
+<!-- ROAD LEGEND -->
+<div id="road-legend">
+  <div class="road-legend-row"><span class="rleg-line motorway"></span>Autostradă / Drum expres</div>
+  <div class="road-legend-row"><span class="rleg-line primary"></span>Drum național (DN)</div>
+  <div class="road-legend-row"><span class="rleg-line secondary"></span>Drum județean (DJ)</div>
+</div>
+
+<!-- ZOOM HINT -->
+<div id="zoom-hint">↕ Mărește harta pentru a vedea drumurile</div>
+
+<!-- STATS BAR -->
+<div class="panel" id="stats">
+  <div class="stat">
+    <span class="stat-value" id="stat-main">1,333</span>
+    <span class="stat-label" id="stat-main-label">Scenariu 5000 loc.</span>
+  </div>
+  <div class="stat-divider"></div>
+  <div class="stat">
+    <span class="stat-value accent">−58%</span>
+    <span class="stat-label">Reducere</span>
+  </div>
+  <div class="stat-divider"></div>
+  <div class="stat">
+    <span class="stat-value">5,000</span>
+    <span class="stat-label">Prag min. loc.</span>
+  </div>
+</div>
+
+<!-- ATTRIBUTION -->
+<div class="panel" id="attribution">
+  Surse: <a href="https://geoportal.ancpi.ro" target="_blank">ANCPI</a> ·
+  <a href="https://insse.ro" target="_blank">INS</a> ·
+  Recensământ&nbsp;2021 ·
+  <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> ·
+  Realizat de Cosette Chichirău
+</div>
+
+<!-- INEFFICIENCY LEGEND (visible only in Situație actuală) -->
+<div id="ineff-legend">
+  <div class="legend-title">Venituri proprii vs. Cheltuieli</div>
+  <div class="legend-row"><span class="legend-swatch" style="background:#7B1B1B"></span>Sub cheltuieli personal administrativ</div>
+  <div class="legend-row"><span class="legend-swatch" style="background:#AA2828"></span>Între personal administrativ și personal total</div>
+  <div class="legend-row"><span class="legend-swatch" style="background:#CC6060"></span>Între personal total și cheltuieli funcționare</div>
+  <div class="legend-row"><span class="legend-swatch" style="background:#F5C0C0"></span>Peste cheltuieli funcționare</div>
+</div>
+
+
+<!-- DETAIL PANEL -->
+<div class="panel" id="detail"></div>
+
+<!-- EDIT PANEL -->
+<div class="panel" id="edit-panel"></div>
+
+<!-- TOOLTIP -->
+<div id="tooltip"></div>
+
+<div id="guide-overlay" onclick="if(event.target===this)closeGuide()">
+  <div id="guide-modal">
+    <button class="guide-close" onclick="closeGuide()">✕</button>
+
+    <div class="guide-flag">
+      <span class="gf-blue"></span>
+      <span class="gf-gold"></span>
+      <span class="gf-red"></span>
+    </div>
+    <div class="guide-title">Ghid de utilizare</div>
+    <div class="guide-subtitle">Hartă interactivă · Reformă administrativă România · Date 2025</div>
+
+    <!-- SECTION 1 -->
+    <div class="guide-section">
+      <div class="guide-section-title">Ce este această hartă</div>
+      <p>Platforma vizualizează cele 3.186 de unități administrativ-teritoriale (UAT-uri) din România — comune, orașe și municipii — și permite explorarea impactului fiscal al diferitelor scenarii de fuzionare. Datele provin din Recensământul 2021, din rapoartele lunare ANAF de execuție a impozitului pe venit și din rapoartele de execuție bugetară COFOG3 la 31 decembrie 2025, publicate de Ministerul Finanțelor.</p>
+    </div>
+
+    <div class="guide-divider"></div>
+
+    <!-- SECTION 2 -->
+    <div class="guide-section">
+      <div class="guide-section-title">Cele două moduri de vizualizare</div>
+      <p><strong style="color:rgba(232,237,245,0.85)">Situație actuală</strong> — harta afișează cele 3.186 de UAT-uri existente. Culoarea fiecărei comune reflectă relația dintre venituri proprii și cheltuieli: roz deschis dacă veniturile proprii depășesc cheltuielile de funcționare; roșu mediu-deschis dacă acoperă cheltuielile de personal total, dar nu și funcționarea; roșu mediu-închis dacă acoperă doar personalul administrativ; roșu închis dacă nu acoperă nici cheltuielile de personal administrativ.</p>
+
+      <p style="margin-top:14px"><strong style="color:rgba(232,237,245,0.85)">Scenariu 5.000 loc.</strong> — harta afișează propunerea de reorganizare generată prin algoritmul Max-P Regionalization: 1.333 de unități administrative rezultate prin fuzionarea comunelor cu mai puțin de 5.000 de locuitori cu vecinii lor. Culorile disting unitățile propuse, iar granițele macro-regionale sunt vizibile.</p>
+    </div>
+
+    <div class="guide-divider"></div>
+
+    <!-- SECTION 3 -->
+    <div class="guide-section">
+      <div class="guide-section-title">Panoul lateral — indicatori financiari</div>
+      <p>Un clic pe orice comună sau grup deschide un panou cu date financiare agregate din execuția bugetară 2025.</p>
+
+      <div class="guide-metric-grid">
+        <div class="guide-metric-box">
+          <div class="guide-metric-name">Impozit pe venit colectat</div>
+          <div class="guide-metric-desc">Total PIT generat de angajatorii din UAT, înainte de redistribuire. Indicator de putere economică — nu de venit per locuitor, deoarece angajații plătesc impozit la sediul angajatorului.</div>
+        </div>
+        <div class="guide-metric-box">
+          <div class="guide-metric-name">Venituri proprii</div>
+          <div class="guide-metric-desc">Impozite pe proprietate și teren (07xxxx) + taxe locale, transport, transfer imobiliar (03, 15, 16, 18xxxx) + venituri din activitate proprie — chirii, redevențe, amenzi (30–39xxxx) + cota de 63% din PIT redistribuită comunei (040100).</div>
+        </div>
+        <div class="guide-metric-box">
+          <div class="guide-metric-name">Cheltuieli funcționare</div>
+          <div class="guide-metric-desc">Total cheltuieli din secțiunea F: salarii, bunuri și servicii, dobânzi, asistență socială, transferuri curente, componente PNRR și alte cheltuieli curente.</div>
+        </div>
+        <div class="guide-metric-box">
+          <div class="guide-metric-name">Cheltuieli dezvoltare</div>
+          <div class="guide-metric-desc">Total cheltuieli din secțiunea D: investiții în active fixe și toate componentele de finanțare aferente proiectelor europene și PNRR.</div>
+        </div>
+      </div>
+
+      <p style="margin-top:16px">Bara aurie de sub „Venituri proprii" arată proporția acestora din totalul veniturilor bugetului local. Restul până la 100% reprezintă transferuri de la bugetul central, subvenții sau fonduri europene.</p>
+    </div>
+
+    <div class="guide-divider"></div>
+
+    <!-- SECTION 4 -->
+    <div class="guide-section">
+      <div class="guide-section-title">Modul de editare — scenarii proprii</div>
+      <p>Butonul <strong style="color:rgba(232,237,245,0.85)">✏ Editare</strong> (disponibil doar în vizualizarea „Situație actuală") permite construirea de scenarii personalizate de fuzionare:</p>
+      <p>1. Faceți clic pe două sau mai multe comune — ele se evidențiază în verde pe hartă. Panoul lateral arată selecția activă și populația cumulată.<br>
+      2. Apăsați <em>Fuzionează</em> pentru a crea un grup cu culoare proprie.<br>
+      3. Clic pe un grup existent afișează componența și economiile estimate.<br>
+      4. Grupurile pot fi dizolvate individual din panoul lateral.</p>
+    </div>
+
+    <div class="guide-divider"></div>
+
+    <!-- SECTION 5 -->
+    <div class="guide-section">
+      <div class="guide-section-title">Cum se calculează economiile estimate</div>
+      <p>La fuzionarea mai multor comune, structura administrativă a celui mai mare UAT din grup este păstrată în întregime. Structurile celorlalte comune devin redundante și pot fi eliminate.</p>
+      <p><strong style="color:rgba(232,237,245,0.85)">Economie estimată = suma cheltuielilor de funcționare ale tuturor comunelor din grup, minus cheltuielile de funcționare ale celui mai mare UAT.</strong></p>
+      <p>Cheltuielile de funcționare includ toate costurile curente: salarii și contribuții, bunuri și servicii, dobânzi, asistență socială și transferuri curente. Nu includ investițiile și proiectele de dezvoltare, care nu se elimină prin fuzionare. Estimarea este conservatoare — în practică, fuzionarea poate genera economii suplimentare prin consolidarea serviciilor și accesul la proiecte de finanțare mai mari.</p>
+    </div>
+
+    <div class="guide-divider"></div>
+
+    <!-- SECTION 6 -->
+    <div class="guide-section">
+      <div class="guide-section-title">Surse de date</div>
+      <div class="guide-source-row"><span class="guide-source-dot"></span><span>Granițe administrative: <a href="https://geoportal.ancpi.ro" target="_blank">ANCPI</a></span></div>
+      <div class="guide-source-row"><span class="guide-source-dot"></span><span>Populație: Recensământul provizoriu 1 decembrie 2021, <a href="https://insse.ro" target="_blank">INS</a></span></div>
+      <div class="guide-source-row"><span class="guide-source-dot"></span><span>Impozit pe venit: Rapoarte IVG lunare 2025, publicate de cele 8 DGRFP pe site-urile <a href="https://static.anaf.ro" target="_blank">ANAF</a></span></div>
+      <div class="guide-source-row"><span class="guide-source-dot"></span><span>Execuție bugetară: Rapoarte COFOG3 la 31.12.2025, <a href="https://transparenta-bugetara.gov.ro" target="_blank">Ministerul Finanțelor / FOREXEBUG</a></span></div>
+      <div class="guide-source-row"><span class="guide-source-dot"></span><span>Algoritm de reorganizare: Max-P Regionalization, prag minim 5.000 de locuitori</span></div>
+      <p style="margin-top:14px;font-size:12px;color:rgba(232,237,245,0.3)">Această platformă este un instrument de analiză și dezbatere publică. Propunerile de reorganizare afișate nu reprezintă o poziție oficială.</p>
+    </div>
+  </div>
+</div>
+<script>
+'use strict';
+
+// ── PALETTE ────────────────────────────────────────────────────────────────
+// 6-color graph-safe palette for proposed scenario
+// (greedy graph coloring on the region adjacency graph — no two adjacent regions share a color)
+const GRAPH_COLORS = [
+  '#4DACD6', // 0 – sky blue
+  '#78C13F', // 1 – green
+  '#F7B731', // 2 – amber
+  '#9B5DE5', // 3 – violet
+  '#E63946', // 4 – red
+  '#00B4A6', // 5 – teal
+];
+
+// region_id → color index (0–5)
+const REGION_COLOR_IDX = {0:1,1:0,2:3,3:2,4:1,5:3,6:1,7:3,8:2,9:1,10:1,11:1,12:1,13:2,14:2,15:1,16:2,17:0,18:1,19:1,20:1,21:2,22:4,23:4,24:2,25:1,26:2,27:3,28:2,29:3,30:0,31:1,32:3,33:1,34:2,35:1,36:0,37:2,38:0,39:0,40:2,41:1,42:1,43:3,44:3,45:3,46:2,47:2,48:0,49:0,50:3,51:2,52:0,53:1,54:3,55:0,56:0,57:3,58:2,59:3,60:2,61:3,62:1,63:1,64:0,65:1,66:2,67:2,68:3,69:2,70:1,71:0,72:0,73:0,74:0,75:3,76:2,77:0,78:3,79:2,80:1,81:1,82:0,83:2,84:3,85:0,86:2,87:4,88:1,89:2,90:1,91:0,92:1,93:2,94:1,95:0,96:3,97:0,98:0,99:2,100:4,101:0,102:0,103:1,104:1,105:1,106:4,107:1,108:1,109:0,110:1,111:3,112:4,113:2,114:1,115:1,116:1,117:3,118:1,119:2,120:0,121:3,122:1,123:2,124:1,125:1,126:0,127:0,128:0,129:0,130:3,131:0,132:1,133:1,134:3,135:3,136:1,137:2,138:1,139:0,140:1,141:2,142:2,143:3,144:1,145:2,146:0,147:0,148:0,149:1,150:2,151:0,152:0,153:4,154:1,155:1,156:2,157:2,158:0,159:0,160:1,161:2,162:3,163:2,164:2,165:3,166:3,167:1,168:3,169:1,170:3,171:0,172:3,173:0,174:0,175:0,176:3,177:1,178:2,179:0,180:1,181:1,182:2,183:0,184:4,185:3,186:1,187:4,188:0,189:2,190:2,191:0,192:3,193:2,194:1,195:1,196:2,197:0,198:2,199:4,200:0,201:4,202:3,203:2,204:0,205:0,206:1,207:3,208:0,209:1,210:0,211:1,212:1,213:1,214:2,215:3,216:1,217:1,218:0,219:2,220:4,221:0,222:1,223:0,224:2,225:4,226:0,227:3,228:1,229:3,230:2,231:2,232:1,233:2,234:1,235:1,236:2,237:1,238:0,239:3,240:2,241:3,242:4,243:0,244:0,245:0,246:1,247:2,248:1,249:2,250:1,251:0,252:0,253:0,254:1,255:3,256:3,257:3,258:1,259:2,260:2,261:0,262:1,263:2,264:1,265:0,266:2,267:0,268:0,269:2,270:0,271:0,272:2,273:1,274:0,275:2,276:2,277:0,278:2,279:1,280:4,281:0,282:3,283:0,284:0,285:0,286:3,287:2,288:4,289:1,290:1,291:2,292:3,293:0,294:3,295:2,296:2,297:2,298:4,299:1,300:3,301:2,302:3,303:1,304:1,305:2,306:0,307:2,308:1,309:2,310:0,311:3,312:1,313:0,314:3,315:0,316:2,317:3,318:0,319:0,320:2,321:1,322:0,323:0,324:0,325:3,326:1,327:1,328:3,329:1,330:4,331:1,332:1,333:2,334:2,335:0,336:2,337:2,338:0,339:1,340:1,341:3,342:3,343:2,344:2,345:0,346:3,347:1,348:2,349:2,350:3,351:0,352:3,353:1,354:1,355:1,356:2,357:1,358:0,359:1,360:0,361:0,362:1,363:2,364:1,365:0,366:3,367:1,368:2,369:0,370:3,371:4,372:0,373:3,374:1,375:1,376:2,377:2,378:0,379:2,380:2,381:4,382:1,383:2,384:1,385:4,386:3,387:0,388:4,389:3,390:3,391:1,392:1,393:1,394:3,395:2,396:2,397:2,398:0,399:3,400:2,401:2,402:0,403:1,404:1,405:2,406:3,407:2,408:2,409:0,410:4,411:2,412:3,413:1,414:3,415:3,416:0,417:3,418:0,419:1,420:1,421:0,422:0,423:0,424:1,425:1,426:0,427:2,428:1,429:1,430:3,431:0,432:0,433:0,434:4,435:3,436:1,437:1,438:1,439:1,440:3,441:1,442:3,443:3,444:5,445:1,446:0,447:3,448:0,449:2,450:1,451:2,452:1,453:3,454:0,455:1,456:0,457:2,458:1,459:2,460:1,461:2,462:2,463:3,464:3,465:1,466:3,467:2,468:3,469:2,470:1,471:3,472:0,473:2,474:3,475:2,476:1,477:3,478:1,479:2,480:2,481:3,482:3,483:1,484:0,485:3,486:1,487:1,488:0,489:0,490:3,491:2,492:3,493:3,494:0,495:0,496:1,497:0,498:1,499:3,500:1,501:3,502:4,503:0,504:0,505:4,506:1,507:4,508:1,509:3,510:0,511:0,512:4,513:2,514:2,515:3,516:1,517:4,518:2,519:3,520:0,521:1,522:0,523:4,524:1,525:0,526:0,527:0,528:0,529:1,530:3,531:0,532:4,533:0,534:2,535:4,536:1,537:1,538:2,539:0,540:3,541:2,542:2,543:3,544:1,545:1,546:0,547:0,548:0,549:2,550:0,551:1,552:2,553:1,554:1,555:3,556:2,557:2,558:2,559:1,560:0,561:2,562:0,563:2,564:2,565:0,566:3,567:0,568:1,569:2,570:1,571:3,572:0,573:2,574:4,575:1,576:2,577:0,578:3,579:4,580:3,581:1,582:0,583:2,584:1,585:3,586:0,587:1,588:2,589:0,590:1,591:3,592:2,593:1,594:0,595:0,596:3,597:0,598:3,599:2,600:1,601:1,602:1,603:1,604:0,605:3,606:1,607:0,608:2,609:0,610:1,611:2,612:2,613:0,614:0,615:0,616:0,617:2,618:2,619:3,620:3,621:0,622:1,623:4,624:1,625:4,626:3,627:2,628:0,629:3,630:0,631:2,632:1,633:4,634:2,635:0,636:0,637:3,638:2,639:3,640:0,641:1,642:1,643:3,644:4,645:0,646:4,647:1,648:0,649:2,650:4,651:0,652:3,653:3,654:0,655:1,656:1,657:0,658:2,659:2,660:4,661:2,662:0,663:2,664:4,665:4,666:0,667:0,668:0,669:2,670:3,671:2,672:3,673:0,674:0,675:1,676:0,677:3,678:0,679:3,680:3,681:3,682:1,683:1,684:1,685:1,686:0,687:0,688:4,689:3,690:3,691:1,692:2,693:4,694:0,695:2,696:1,697:2,698:0,699:1,700:2,701:2,702:3,703:1,704:4,705:1,706:0,707:0,708:1,709:0,710:1,711:3,712:0,713:2,714:1,715:1,716:3,717:2,718:4,719:2,720:1,721:2,722:1,723:2,724:2,725:2,726:1,727:1,728:2,729:3,730:2,731:2,732:1,733:2,734:1,735:3,736:3,737:4,738:3,739:0,740:1,741:2,742:1,743:2,744:4,745:4,746:2,747:3,748:3,749:1,750:3,751:2,752:0,753:0,754:2,755:2,756:1,757:0,758:0,759:0,760:2,761:0,762:2,763:2,764:3,765:2,766:1,767:2,768:2,769:3,770:3,771:3,772:4,773:1,774:0,775:3,776:3,777:0,778:3,779:2,780:0,781:2,782:1,783:3,784:0,785:3,786:0,787:1,788:1,789:2,790:1,791:2,792:2,793:2,794:2,795:2,796:1,797:3,798:3,799:2,800:3,801:0,802:2,803:3,804:1,805:2,806:1,807:3,808:4,809:1,810:3,811:3,812:3,813:1,814:2,815:1,816:0,817:3,818:1,819:1,820:3,821:4,822:0,823:3,824:3,825:1,826:1,827:4,828:0,829:3,830:3,831:5,832:1,833:2,834:1,835:0,836:0,837:4,838:2,839:2,840:0,841:3,842:2,843:1,844:0,845:1,846:3,847:0,848:3,849:2,850:1,851:4,852:2,853:3,854:1,855:1,856:1,857:2,858:1,859:1,860:1,861:2,862:1,863:3,864:1,865:0,866:2,867:1,868:2,869:3,870:3,871:4,872:0,873:1,874:3,875:1,876:0,877:3,878:3,879:3,880:0,881:3,882:3,883:1,884:4,885:4,886:3,887:4,888:2,889:2,890:2,891:4,892:1,893:3,894:2,895:1,896:2,897:3,898:1,899:1,900:0,901:3,902:3,903:3,904:4,905:0,906:4,907:3,908:2,909:3,910:2,911:4,912:2,913:1,914:3,915:1,916:4,917:1,918:2,919:4,920:0,921:0,922:0,923:3,924:0,925:2,926:0,927:3,928:1,929:2,930:2,931:1,932:2,933:2,934:2,935:3,936:3,937:2,938:3,939:0,940:0,941:2,942:1,943:1,944:3,945:2,946:0,947:0,948:1,949:1,950:2,951:3,952:2,953:3,954:0,955:0,956:3,957:0,958:1,959:1,960:2,961:2,962:0,963:3,964:2,965:1,966:0,967:1,968:4,969:3,970:2,971:1,972:3,973:0,974:3,975:3,976:4,977:2,978:0,979:2,980:1,981:2,982:1,983:2,984:0,985:2,986:0,987:2,988:3,989:3,990:3,991:3,992:1,993:3,994:3,995:2,996:0,997:2,998:3,999:2,1000:2,1001:0,1002:3,1003:2,1004:1,1005:1,1006:3,1007:1,1008:3,1009:2,1010:0,1011:3,1012:2,1013:2,1014:0,1015:2,1016:2,1017:1,1018:0,1019:2,1020:2,1021:2,1022:1,1023:2,1024:0,1025:3,1026:2,1027:0,1028:2,1029:2,1030:0,1031:0,1032:1,1033:4,1034:3,1035:2,1036:2,1037:3,1038:2,1039:3,1040:2,1041:2,1042:0,1043:2,1044:2,1045:0,1046:2,1047:4,1048:4,1049:3,1050:3,1051:1,1052:3,1053:1,1054:2,1055:0,1056:3,1057:2,1058:0,1059:0,1060:0,1061:3,1062:1,1063:1,1064:3,1065:3,1066:0,1067:2,1068:4,1069:3,1070:3,1071:2,1072:3,1073:2,1074:3,1075:0,1076:1,1077:2,1078:3,1079:3,1080:2,1081:3,1082:0,1083:3,1084:4,1085:3,1086:3,1087:1,1088:2,1089:1,1090:3,1091:1,1092:0,1093:1,1094:4,1095:3,1096:2,1097:3,1098:2,1099:3,1100:3,1101:4,1102:3,1103:3,1104:2,1105:1,1106:1,1107:3,1108:1,1109:2,1110:1,1111:5,1112:1,1113:3,1114:1,1115:1,1116:4,1117:3,1118:4,1119:4,1120:3,1121:3,1122:3,1123:4,1124:1,1125:2,1126:1,1127:4,1128:3,1129:2,1130:0,1131:3,1132:2,1133:2,1134:0,1135:0,1136:2,1137:3,1138:1,1139:2,1140:2,1141:2,1142:2,1143:0,1144:2,1145:0,1146:1,1147:1,1148:1,1149:2,1150:1,1151:0,1152:0,1153:2,1154:3,1155:0,1156:1,1157:1,1158:2,1159:3,1160:4,1161:0,1162:2,1163:0,1164:3,1165:3,1166:3,1167:1,1168:1,1169:2,1170:3,1171:0,1172:2,1173:3,1174:1,1175:0,1176:3,1177:2,1178:1,1179:3,1180:3,1181:1,1182:3,1183:3,1184:3,1185:3,1186:3,1187:3,1188:2,1189:0,1190:1,1191:3,1192:1,1193:4,1194:1,1195:2,1196:0,1197:3,1198:3,1199:1,1200:0,1201:2,1202:0,1203:0,1204:3,1205:2,1206:0,1207:2,1208:2,1209:2,1210:2,1211:5,1212:0,1213:4,1214:1,1215:1,1216:2,1217:1,1218:3,1219:2,1220:3,1221:1,1222:3,1223:4,1224:1,1225:0,1226:0,1227:2,1228:0,1229:0,1230:2,1231:2,1232:3,1233:1,1234:3,1235:3,1236:2,1237:3,1238:4,1239:0,1240:0,1241:3,1242:0,1243:1,1244:2,1245:2,1246:1,1247:2,1248:3,1249:3,1250:1,1251:1,1252:2,1253:0,1254:0,1255:1,1256:2,1257:2,1258:4,1259:2,1260:4,1261:4,1262:1,1263:2,1264:3,1265:4,1266:2,1267:3,1268:3,1269:1,1270:0,1271:2,1272:2,1273:0,1274:3,1275:3,1276:4,1277:1,1278:0,1279:1,1280:4,1281:0,1282:3,1283:3,1284:1,1285:0,1286:3,1287:3,1288:3,1289:3,1290:0,1291:2,1292:2,1293:3,1294:4,1295:2,1296:3,1297:3,1298:4,1299:0,1300:3,1301:4,1302:3,1303:0,1304:3,1305:2,1306:3,1307:4,1308:2,1309:4,1310:2,1311:2,1312:2,1313:1,1314:3,1315:2,1316:2,1317:3,1318:3,1319:3,1320:1,1321:1,1322:2,1323:0,1324:0,1325:4,1326:2,1327:3,1328:3,1329:1,1330:3,1331:2,1332:4};
+
+// Custom group palette — distinct, vibrant colors for user-created groups
+const GROUP_PALETTE = [
+  '#FF4D6D','#4CC9F0','#7BF1A8','#FFD60A','#FF6B6B',
+  '#A8DADC','#F72585','#4361EE','#B5E48C','#FFA62B',
+  '#E040FB','#00C9A7','#FF8C42','#3D5A80','#CBF11C',
+  '#FF595E','#8ECAE6','#06D6A0','#FFBE0B','#C77DFF',
+];
+
+function paletteColor(id) {
+  const idx = REGION_COLOR_IDX[id];
+  return GRAPH_COLORS[idx !== undefined ? idx : 0];
+}
+
+const COUNTY_PALETTE = [
+  '#e63946','#f4a261','#e9c46a','#2a9d8f','#264653',
+  '#457b9d','#a8dadc','#606c38','#dda15e','#bc6c25',
+  '#6a4c93','#1982c4','#8ac926','#ff595e','#ffca3a',
+  '#6a0572','#0d3b66','#c77dff','#f95738','#3d405b',
+  '#48cae4','#023e8a','#f72585','#b5838d','#6d6875',
+  '#a7c957','#386641','#6a994e','#bc4749','#606c38',
+  '#e9c46a','#f4a261','#e76f51','#264653','#2a9d8f',
+  '#457b9d','#1d3557','#e63946','#f1faee','#a8dadc',
+  '#4361ee','#480ca8',
+];
+
+const countyColorMap = {};
+let countyIdx = 0;
+function getCountyColor(judet) {
+  if (!countyColorMap[judet]) {
+    countyColorMap[judet] = COUNTY_PALETTE[countyIdx++ % COUNTY_PALETTE.length];
+  }
+  return countyColorMap[judet];
+}
+
+// ── INEFFICIENCY COLORS (own_revenues vs spending thresholds, precomputed) ────
+// Light pink: own_revenues ≥ chelt_functionare
+// Medium dark (#AA2828): exec_personnel ≤ own_revenues < chelt_personal
+// Medium light (#CC6060): chelt_personal ≤ own_revenues < chelt_functionare
+// Dark red (#7B1B1B):    own_revenues < exec_personnel
+const INEFFICIENCY_COLORS = {
+  2130:"#AA2828",2309:"#AA2828",2381:"#AA2828",2577:"#AA2828",2988:"#CC6060",3039:"#AA2828",3397:"#7B1B1B",9026:"#AA2828",3459:"#AA2828",4106:"#CC6060",3761:"#AA2828",3805:"#AA2828",3841:"#7B1B1B",3958:"#AA2828",1071:"#F5C0C0",4008:"#7B1B1B",4188:"#CC6060",4142:"#CC6060",9019:"#AA2828",4240:"#AA2828",
+  4268:"#AA2828",4302:"#AA2828",4366:"#F5C0C0",4482:"#CC6060",4525:"#AA2828",4703:"#CC6060",4767:"#7B1B1B",4927:"#AA2828",4981:"#CC6060",5103:"#CC6060",5167:"#AA2828",5210:"#AA2828",5309:"#AA2828",5336:"#F5C0C0",5577:"#AA2828",5700:"#AA2828",5755:"#F5C0C0",5826:"#AA2828",6048:"#AA2828",6119:"#AA2828",
+  6164:"#7B1B1B",6217:"#CC6060",6271:"#7B1B1B",6397:"#7B1B1B",6468:"#7B1B1B",6547:"#AA2828",6627:"#7B1B1B",6592:"#CC6060",6761:"#AA2828",6930:"#AA2828",6976:"#AA2828",7044:"#CC6060",7348:"#CC6060",7384:"#CC6060",7099:"#CC6060",7197:"#7B1B1B",7810:"#CC6060",7446:"#7B1B1B",7865:"#CC6060",7945:"#CC6060",
+  7767:"#CC6060",8014:"#CC6060",8158:"#CC6060",8229:"#AA2828",8354:"#CC6060",8425:"#7B1B1B",8826:"#CC6060",1213:"#AA2828",1017:"#CC6060",1348:"#CC6060",1874:"#CC6060",2915:"#7B1B1B",1151:"#AA2828",1455:"#AA2828",1696:"#CC6060",1794:"#CC6060",8096:"#CC6060",1936:"#AA2828",9743:"#AA2828",9798:"#AA2828",
+  9832:"#AA2828",10051:"#AA2828",10104:"#CC6060",9887:"#CC6060",9930:"#AA2828",10006:"#CC6060",10195:"#AA2828",10239:"#AA2828",10293:"#AA2828",10346:"#AA2828",10373:"#CC6060",10417:"#AA2828",10453:"#AA2828",10514:"#AA2828",10532:"#AA2828",10649:"#AA2828",10701:"#7B1B1B",12912:"#7B1B1B",9280:"#CC6060",10827:"#AA2828",
+  12920:"#CC6060",10872:"#CC6060",10916:"#CC6060",10943:"#CC6060",11174:"#7B1B1B",11058:"#AA2828",11236:"#AA2828",11307:"#7B1B1B",11352:"#AA2828",9333:"#CC6060",11398:"#AA2828",11423:"#AA2828",11478:"#CC6060",11502:"#AA2828",11539:"#CC6060",11637:"#AA2828",11664:"#AA2828",11735:"#AA2828",11762:"#7B1B1B",12144:"#CC6060",
+  11842:"#CC6060",11940:"#AA2828",12206:"#AA2828",11995:"#CC6060",12037:"#CC6060",12224:"#AA2828",12242:"#AA2828",12288:"#AA2828",12340:"#CC6060",12055:"#CC6060",12368:"#CC6060",12402:"#AA2828",12126:"#CC6060",9360:"#CC6060",12509:"#AA2828",12457:"#AA2828",10765:"#CC6060",12572:"#AA2828",12689:"#AA2828",12643:"#AA2828",
+  9397:"#CC6060",12778:"#CC6060",12938:"#AA2828",12812:"#7B1B1B",12849:"#AA2828",12876:"#F5C0C0",9262:"#CC6060",9459:"#F5C0C0",9495:"#CC6060",9538:"#AA2828",9574:"#CC6060",9627:"#CC6060",9654:"#CC6060",11584:"#CC6060",12091:"#AA2828",9690:"#CC6060",13819:"#AA2828",13891:"#AA2828",13935:"#F5C0C0",13999:"#AA2828",
+  14049:"#F5C0C0",14085:"#AA2828",14165:"#CC6060",14272:"#7B1B1B",14450:"#AA2828",13187:"#F5C0C0",14352:"#AA2828",14405:"#CC6060",14584:"#7B1B1B",14673:"#AA2828",14726:"#7B1B1B",13276:"#F5C0C0",14753:"#CC6060",14851:"#CC6060",14922:"#AA2828",20063:"#AA2828",14940:"#AA2828",15064:"#AA2828",15108:"#AA2828",15233:"#F5C0C0",
+  15313:"#CC6060",15402:"#AA2828",15448:"#AA2828",15493:"#AA2828",15554:"#7B1B1B",15652:"#AA2828",15741:"#CC6060",15830:"#AA2828",15901:"#AA2828",15983:"#AA2828",16132:"#CC6060",16329:"#CC6060",16365:"#F5C0C0",16285:"#AA2828",16427:"#7B1B1B",16454:"#CC6060",16506:"#AA2828",16472:"#CC6060",16551:"#7B1B1B",16613:"#AA2828",
+  16659:"#AA2828",16739:"#AA2828",16757:"#AA2828",16908:"#CC6060",16944:"#CC6060",17049:"#AA2828",13365:"#F5C0C0",17101:"#CC6060",17209:"#CC6060",17254:"#CC6060",17334:"#AA2828",17398:"#AA2828",17423:"#CC6060",17496:"#CC6060",17575:"#AA2828",17619:"#AA2828",17726:"#AA2828",17771:"#CC6060",17824:"#F5C0C0",17851:"#7B1B1B",
+  18028:"#CC6060",17913:"#AA2828",17968:"#AA2828",18162:"#AA2828",18242:"#AA2828",20048:"#7B1B1B",18331:"#AA2828",18411:"#AA2828",18475:"#CC6060",18527:"#CC6060",18554:"#AA2828",18581:"#AA2828",18670:"#AA2828",18741:"#AA2828",18778:"#AA2828",19114:"#CC6060",18858:"#AA2828",18938:"#AA2828",19141:"#AA2828",19007:"#CC6060",
+  19212:"#7B1B1B",19249:"#CC6060",19338:"#F5C0C0",19392:"#AA2828",19560:"#AA2828",19631:"#AA2828",19695:"#CC6060",13524:"#F5C0C0",19793:"#CC6060",19999:"#AA2828",20055:"#7B1B1B",13490:"#AA2828",13622:"#CC6060",13169:"#CC6060",13668:"#CC6060",13301:"#CC6060",13392:"#CC6060",13757:"#CC6060",21506:"#AA2828",21007:"#AA2828",
+  21098:"#7B1B1B",21123:"#AA2828",21196:"#7B1B1B",21454:"#AA2828",21249:"#CC6060",21338:"#AA2828",21418:"#AA2828",21560:"#CC6060",21597:"#7B1B1B",26338:"#CC6060",21668:"#7B1B1B",21757:"#AA2828",21720:"#CC6060",21855:"#AA2828",21891:"#7B1B1B",21971:"#AA2828",22059:"#7B1B1B",22111:"#AA2828",22237:"#AA2828",22460:"#AA2828",
+  22488:"#7B1B1B",22576:"#CC6060",22665:"#AA2828",22781:"#AA2828",22718:"#CC6060",26346:"#7B1B1B",22834:"#AA2828",20607:"#7B1B1B",22898:"#AA2828",20313:"#CC6060",22941:"#7B1B1B",23047:"#CC6060",26379:"#7B1B1B",23127:"#7B1B1B",20359:"#CC6060",23207:"#7B1B1B",23289:"#7B1B1B",23350:"#AA2828",23387:"#AA2828",20411:"#CC6060",
+  23449:"#AA2828",20466:"#CC6060",23494:"#AA2828",23644:"#7B1B1B",23715:"#CC6060",26353:"#7B1B1B",23797:"#CC6060",23868:"#7B1B1B",23948:"#AA2828",23975:"#7B1B1B",24187:"#AA2828",24034:"#7B1B1B",24276:"#AA2828",24089:"#AA2828",24338:"#7B1B1B",24427:"#7B1B1B",24524:"#AA2828",24631:"#AA2828",26361:"#7B1B1B",24766:"#AA2828",
+  24837:"#AA2828",24711:"#AA2828",24999:"#7B1B1B",25148:"#AA2828",26320:"#CC6060",25068:"#CC6060",25228:"#AA2828",25291:"#7B1B1B",25362:"#7B1B1B",25488:"#7B1B1B",25521:"#AA2828",20670:"#AA2828",25629:"#7B1B1B",25692:"#7B1B1B",25825:"#CC6060",25745:"#CC6060",25861:"#AA2828",25932:"#AA2828",26029:"#CC6060",26083:"#AA2828",
+  26118:"#AA2828",26289:"#CC6060",22380:"#CC6060",20297:"#CC6060",20876:"#CC6060",20563:"#CC6060",20778:"#AA2828",20821:"#CC6060",22166:"#CC6060",20910:"#CC6060",20965:"#CC6060",27070:"#CC6060",26742:"#CC6060",27212:"#CC6060",27285:"#AA2828",27329:"#CC6060",27383:"#CC6060",27436:"#CC6060",27506:"#AA2828",27560:"#CC6060",
+  27631:"#F5C0C0",27686:"#CC6060",27757:"#AA2828",27846:"#AA2828",27908:"#7B1B1B",27935:"#CC6060",27971:"#AA2828",28077:"#CC6060",28709:"#AA2828",28139:"#AA2828",28193:"#AA2828",28246:"#CC6060",28335:"#AA2828",28415:"#CC6060",28497:"#7B1B1B",28530:"#CC6060",28665:"#CC6060",28763:"#CC6060",28816:"#AA2828",28889:"#CC6060",
+  28941:"#AA2828",29001:"#AA2828",29038:"#7B1B1B",29092:"#AA2828",29154:"#AA2828",29243:"#CC6060",29341:"#AA2828",29403:"#AA2828",32195:"#CC6060",29467:"#CC6060",29519:"#CC6060",29573:"#CC6060",29662:"#CC6060",29724:"#CC6060",29813:"#AA2828",29760:"#7B1B1B",29902:"#CC6060",29948:"#AA2828",30014:"#F5C0C0",30069:"#AA2828",
+  30149:"#F5C0C0",30229:"#CC6060",30274:"#CC6060",32161:"#CC6060",27169:"#AA2828",30336:"#AA2828",30416:"#CC6060",30470:"#CC6060",30568:"#AA2828",30648:"#AA2828",30719:"#AA2828",30773:"#CC6060",30844:"#AA2828",32187:"#CC6060",30871:"#F5C0C0",30988:"#CC6060",31011:"#CC6060",31057:"#7B1B1B",32179:"#CC6060",28610:"#CC6060",
+  26582:"#CC6060",26653:"#F5C0C0",31128:"#AA2828",31333:"#AA2828",31379:"#AA2828",31422:"#CC6060",31208:"#7B1B1B",31510:"#AA2828",31262:"#CC6060",32153:"#CC6060",31609:"#7B1B1B",31565:"#AA2828",31654:"#AA2828",31878:"#CC6060",31716:"#CC6060",31789:"#CC6060",32201:"#AA2828",31841:"#AA2828",31921:"#AA2828",31976:"#AA2828",
+  32090:"#CC6060",32045:"#AA2828",26804:"#CC6060",26877:"#AA2828",26564:"#CC6060",26975:"#CC6060",26699:"#CC6060",26920:"#CC6060",30915:"#CC6060",26840:"#CC6060",32027:"#CC6060",27007:"#7B1B1B",32633:"#CC6060",32660:"#AA2828",32704:"#CC6060",32768:"#AA2828",32811:"#AA2828",32884:"#CC6060",33015:"#AA2828",33122:"#CC6060",
+  32955:"#7B1B1B",179953:"#CC6060",33177:"#AA2828",33202:"#AA2828",179686:"#CC6060",33248:"#CC6060",33275:"#AA2828",33337:"#CC6060",33364:"#AA2828",33382:"#CC6060",33435:"#CC6060",33514:"#AA2828",33541:"#CC6060",33603:"#CC6060",33729:"#CC6060",33621:"#CC6060",33765:"#CC6060",33658:"#AA2828",33881:"#7B1B1B",33952:"#CC6060",
+  179659:"#AA2828",33989:"#AA2828",34075:"#AA2828",34155:"#AA2828",34173:"#CC6060",179720:"#AA2828",34235:"#F5C0C0",34262:"#AA2828",34280:"#CC6060",34333:"#CC6060",34360:"#AA2828",179944:"#7B1B1B",34397:"#AA2828",34477:"#CC6060",34618:"#AA2828",34645:"#CC6060",34690:"#CC6060",34770:"#AA2828",34850:"#CC6060",34422:"#7B1B1B",
+  34903:"#CC6060",34547:"#AA2828",35152:"#AA2828",34985:"#AA2828",35054:"#CC6060",35090:"#CC6060",35269:"#AA2828",35312:"#7B1B1B",35429:"#AA2828",33845:"#7B1B1B",32394:"#CC6060",32483:"#CC6060",32544:"#AA2828",32599:"#AA2828",40035:"#AA2828",36131:"#AA2828",36202:"#AA2828",36300:"#AA2828",39983:"#7B1B1B",36373:"#AA2828",
+  36426:"#AA2828",36499:"#AA2828",39967:"#AA2828",36532:"#AA2828",36569:"#AA2828",36649:"#7B1B1B",36676:"#7B1B1B",36756:"#AA2828",39975:"#7B1B1B",36809:"#AA2828",36907:"#AA2828",36952:"#AA2828",35759:"#CC6060",37057:"#AA2828",37011:"#AA2828",39959:"#7B1B1B",37100:"#AA2828",37173:"#AA2828",37217:"#AA2828",37324:"#AA2828",
+  37397:"#AA2828",37459:"#AA2828",37618:"#AA2828",37547:"#AA2828",37672:"#AA2828",37734:"#AA2828",37770:"#AA2828",37823:"#AA2828",37850:"#AA2828",39942:"#AA2828",37912:"#AA2828",37958:"#AA2828",38063:"#F5C0C0",38161:"#AA2828",38241:"#7B1B1B",38321:"#AA2828",38376:"#AA2828",38456:"#7B1B1B",38492:"#AA2828",38544:"#CC6060",
+  38580:"#7B1B1B",35839:"#CC6060",38633:"#CC6060",38679:"#AA2828",38731:"#7B1B1B",38811:"#CC6060",38848:"#AA2828",38893:"#AA2828",39122:"#AA2828",35884:"#AA2828",39220:"#AA2828",38982:"#AA2828",39051:"#AA2828",39266:"#AA2828",39328:"#CC6060",39391:"#AA2828",39417:"#AA2828",39532:"#AA2828",39612:"#AA2828",39694:"#AA2828",
+  39658:"#AA2828",39738:"#AA2828",39792:"#AA2828",39836:"#AA2828",39872:"#AA2828",35731:"#CC6060",36006:"#CC6060",36453:"#AA2828",35946:"#AA2828",37280:"#AA2828",36060:"#AA2828",39168:"#AA2828",42824:"#AA2828",42842:"#AA2828",42913:"#AA2828",44560:"#CC6060",42708:"#CC6060",42968:"#AA2828",43019:"#AA2828",43073:"#AA2828",
+  43117:"#F5C0C0",43180:"#AA2828",43242:"#CC6060",43279:"#AA2828",43313:"#CC6060",43466:"#AA2828",43493:"#CC6060",43563:"#CC6060",43625:"#AA2828",43652:"#AA2828",43698:"#7B1B1B",43732:"#AA2828",43787:"#AA2828",43812:"#AA2828",43867:"#CC6060",43929:"#CC6060",43992:"#CC6060",44060:"#CC6060",44113:"#CC6060",42771:"#CC6060",
+  44140:"#AA2828",44177:"#CC6060",44202:"#CC6060",44257:"#CC6060",44300:"#CC6060",44328:"#AA2828",44355:"#AA2828",44391:"#F5C0C0",44435:"#AA2828",44462:"#AA2828",44505:"#AA2828",44532:"#CC6060",42682:"#CC6060",42753:"#AA2828",43331:"#CC6060",43411:"#CC6060",40526:"#AA2828",42498:"#7B1B1B",40544:"#CC6060",40606:"#CC6060",
+  40633:"#CC6060",40688:"#AA2828",40704:"#CC6060",40768:"#CC6060",40820:"#CC6060",40857:"#AA2828",40900:"#F5C0C0",42456:"#7B1B1B",42480:"#CC6060",40928:"#CC6060",40955:"#CC6060",40991:"#CC6060",41033:"#F5C0C0",41088:"#F5C0C0",41113:"#AA2828",41177:"#CC6060",42472:"#7B1B1B",41248:"#CC6060",41284:"#CC6060",41346:"#AA2828",
+  41382:"#AA2828",41417:"#CC6060",41471:"#CC6060",41541:"#AA2828",41578:"#AA2828",41621:"#CC6060",41667:"#CC6060",41701:"#CC6060",41738:"#CC6060",42464:"#CC6060",41925:"#F5C0C0",41818:"#CC6060",41854:"#CC6060",42449:"#CC6060",41943:"#CC6060",42003:"#CC6060",42058:"#AA2828",42076:"#CC6060",42101:"#CC6060",42156:"#AA2828",
+  42183:"#CC6060",42236:"#CC6060",42307:"#CC6060",42398:"#CC6060",40198:"#CC6060",40241:"#CC6060",40278:"#CC6060",40438:"#CC6060",40214:"#F5C0C0",40303:"#CC6060",40367:"#CC6060",40394:"#AA2828",40465:"#AA2828",40492:"#CC6060",44863:"#CC6060",44989:"#AA2828",44934:"#AA2828",45003:"#AA2828",45101:"#CC6060",45245:"#7B1B1B",
+  45334:"#7B1B1B",45361:"#AA2828",45389:"#7B1B1B",45496:"#AA2828",45539:"#7B1B1B",45619:"#CC6060",45673:"#AA2828",45815:"#AA2828",45753:"#7B1B1B",45888:"#7B1B1B",45959:"#7B1B1B",46019:"#AA2828",46108:"#7B1B1B",46180:"#AA2828",46251:"#AA2828",46313:"#AA2828",46377:"#CC6060",46439:"#7B1B1B",46484:"#CC6060",46554:"#7B1B1B",
+  50564:"#AA2828",46769:"#CC6060",46803:"#AA2828",46830:"#AA2828",46867:"#CC6060",46910:"#CC6060",47006:"#AA2828",47079:"#AA2828",47159:"#7B1B1B",47186:"#AA2828",47300:"#AA2828",47337:"#AA2828",47630:"#AA2828",47373:"#CC6060",47417:"#7B1B1B",47453:"#CC6060",47578:"#AA2828",47774:"#AA2828",47818:"#7B1B1B",47854:"#AA2828",
+  48021:"#7B1B1B",48138:"#CC6060",48227:"#7B1B1B",48165:"#7B1B1B",48557:"#AA2828",48487:"#CC6060",48682:"#AA2828",48771:"#CC6060",48842:"#AA2828",48922:"#7B1B1B",48968:"#AA2828",49019:"#AA2828",49046:"#AA2828",49073:"#AA2828",49153:"#AA2828",49206:"#CC6060",49233:"#7B1B1B",49313:"#7B1B1B",49439:"#CC6060",49484:"#AA2828",
+  49545:"#AA2828",49625:"#F5C0C0",49849:"#CC6060",49643:"#AA2828",49769:"#AA2828",49894:"#AA2828",50549:"#CC6060",49956:"#CC6060",50399:"#AA2828",50022:"#CC6060",50068:"#7B1B1B",50102:"#CC6060",50228:"#AA2828",50326:"#7B1B1B",50415:"#AA2828",50479:"#CC6060",44818:"#CC6060",44845:"#AA2828",47916:"#AA2828",48325:"#CC6060",
+  48744:"#AA2828",94125:"#AA2828",101083:"#CC6060",92961:"#CC6060",101724:"#AA2828",101804:"#CC6060",101822:"#AA2828",93085:"#CC6060",180055:"#7B1B1B",102419:"#7B1B1B",93281:"#CC6060",93325:"#CC6060",93370:"#AA2828",93441:"#CC6060",93487:"#CC6060",93539:"#CC6060",102838:"#7B1B1B",102945:"#CC6060",103014:"#CC6060",179962:"#7B1B1B",
+  93664:"#AA2828",103568:"#CC6060",103764:"#CC6060",93771:"#CC6060",93815:"#AA2828",93851:"#CC6060",104083:"#7B1B1B",93931:"#CC6060",104181:"#AA2828",100638:"#AA2828",92587:"#AA2828",104323:"#7B1B1B",104341:"#AA2828",94223:"#CC6060",104635:"#7B1B1B",104751:"#AA2828",94312:"#CC6060",104886:"#AA2828",105222:"#CC6060",105384:"#AA2828",
+  105259:"#CC6060",94580:"#AA2828",94562:"#AA2828",105455:"#AA2828",105605:"#AA2828",94606:"#CC6060",94651:"#AA2828",94731:"#CC6060",105712:"#CC6060",105829:"#CC6060",94768:"#CC6060",92569:"#CC6060",100610:"#AA2828",101458:"#CC6060",103032:"#CC6060",93888:"#CC6060",51243:"#AA2828",51305:"#7B1B1B",51332:"#AA2828",51387:"#AA2828",
+  51449:"#AA2828",51500:"#AA2828",51546:"#7B1B1B",51573:"#AA2828",51626:"#AA2828",51662:"#7B1B1B",51699:"#CC6060",51751:"#7B1B1B",51804:"#AA2828",51840:"#7B1B1B",51948:"#AA2828",51984:"#7B1B1B",52035:"#7B1B1B",51877:"#AA2828",52062:"#AA2828",52115:"#AA2828",52160:"#7B1B1B",53489:"#AA2828",52570:"#7B1B1B",52650:"#AA2828",
+  52696:"#AA2828",52721:"#AA2828",53700:"#AA2828",52758:"#CC6060",52785:"#7B1B1B",52856:"#7B1B1B",52909:"#7B1B1B",52936:"#CC6060",52954:"#7B1B1B",52990:"#AA2828",53023:"#AA2828",53069:"#7B1B1B",53103:"#7B1B1B",53130:"#AA2828",53167:"#AA2828",53210:"#7B1B1B",53247:"#CC6060",53274:"#CC6060",53327:"#AA2828",53345:"#AA2828",
+  53372:"#AA2828",50987:"#7B1B1B",53425:"#AA2828",53513:"#7B1B1B",53577:"#AA2828",53675:"#AA2828",53639:"#7B1B1B",53728:"#AA2828",53755:"#7B1B1B",53791:"#AA2828",53853:"#7B1B1B",54056:"#AA2828",54109:"#CC6060",54163:"#7B1B1B",54350:"#7B1B1B",54270:"#CC6060",54305:"#AA2828",54387:"#AA2828",54412:"#AA2828",54485:"#CC6060",
+  54500:"#AA2828",54537:"#AA2828",54573:"#7B1B1B",54617:"#AA2828",54699:"#7B1B1B",51010:"#CC6060",50790:"#CC6060",50889:"#AA2828",50923:"#CC6060",50969:"#AA2828",51056:"#AA2828",51118:"#AA2828",51207:"#AA2828",55473:"#CC6060",55598:"#CC6060",55623:"#7B1B1B",55687:"#F5C0C0",55776:"#7B1B1B",55838:"#CC6060",55918:"#AA2828",
+  56014:"#CC6060",56096:"#AA2828",56210:"#CC6060",56265:"#CC6060",56327:"#AA2828",56354:"#AA2828",56425:"#AA2828",56461:"#CC6060",56522:"#AA2828",56568:"#CC6060",56666:"#AA2828",57314:"#CC6060",56773:"#AA2828",56844:"#AA2828",56988:"#CC6060",57083:"#7B1B1B",57163:"#CC6060",57225:"#CC6060",57350:"#AA2828",57449:"#7B1B1B",
+  55062:"#7B1B1B",57546:"#7B1B1B",57582:"#F5C0C0",57644:"#AA2828",57706:"#CC6060",57742:"#7B1B1B",57948:"#CC6060",57831:"#7B1B1B",57902:"#CC6060",58008:"#AA2828",58142:"#CC6060",58204:"#7B1B1B",55106:"#7B1B1B",58259:"#F5C0C0",58311:"#F5C0C0",58357:"#7B1B1B",58393:"#CC6060",58464:"#CC6060",58534:"#AA2828",55160:"#7B1B1B",
+  55277:"#F5C0C0",58552:"#AA2828",58623:"#AA2828",58721:"#CC6060",60169:"#AA2828",58794:"#7B1B1B",58856:"#7B1B1B",58918:"#CC6060",58990:"#AA2828",59041:"#CC6060",59238:"#AA2828",59130:"#7B1B1B",59283:"#CC6060",59434:"#CC6060",55311:"#CC6060",59498:"#7B1B1B",59586:"#AA2828",59327:"#CC6060",59416:"#AA2828",59657:"#7B1B1B",
+  59826:"#CC6060",59693:"#AA2828",59764:"#CC6060",59880:"#7B1B1B",59942:"#7B1B1B",60026:"#7B1B1B",60062:"#CC6060",60099:"#CC6060",55357:"#CC6060",54975:"#F5C0C0",55008:"#CC6060",55384:"#CC6060",55259:"#CC6060",55446:"#AA2828",60598:"#CC6060",60883:"#AA2828",60570:"#CC6060",60945:"#CC6060",61005:"#AA2828",63198:"#CC6060",
+  61069:"#CC6060",63294:"#AA2828",61121:"#AA2828",61167:"#AA2828",61210:"#CC6060",61256:"#CC6060",61283:"#CC6060",61318:"#CC6060",61372:"#CC6060",61452:"#CC6060",61513:"#CC6060",63286:"#CC6060",61559:"#CC6060",61620:"#CC6060",63300:"#AA2828",61675:"#CC6060",61737:"#AA2828",63161:"#7B1B1B",63334:"#CC6060",61808:"#7B1B1B",
+  61826:"#7B1B1B",63326:"#CC6060",63278:"#CC6060",61871:"#CC6060",61951:"#AA2828",62020:"#AA2828",60632:"#F5C0C0",62057:"#CC6060",63152:"#CC6060",62137:"#CC6060",62253:"#CC6060",62191:"#CC6060",62280:"#CC6060",62440:"#CC6060",62486:"#CC6060",62538:"#CC6060",62609:"#CC6060",62672:"#AA2828",62707:"#CC6060",62761:"#CC6060",
+  62798:"#AA2828",62878:"#CC6060",63318:"#CC6060",62823:"#CC6060",62903:"#CC6060",62949:"#CC6060",62985:"#CC6060",63045:"#CC6060",63072:"#CC6060",63189:"#CC6060",60721:"#CC6060",63125:"#CC6060",63170:"#CC6060",60419:"#CC6060",60482:"#CC6060",60847:"#CC6060",60776:"#F5C0C0",60455:"#F5C0C0",60801:"#CC6060",62360:"#CC6060",
+  60507:"#CC6060",62397:"#CC6060",60687:"#CC6060",60534:"#F5C0C0",63777:"#7B1B1B",65113:"#F5C0C0",63633:"#CC6060",63802:"#CC6060",63866:"#7B1B1B",65121:"#CC6060",63893:"#CC6060",63937:"#AA2828",64041:"#CC6060",64005:"#CC6060",64096:"#CC6060",64130:"#AA2828",64194:"#CC6060",64238:"#CC6060",63553:"#CC6060",65147:"#7B1B1B",
+  64265:"#AA2828",65154:"#7B1B1B",64318:"#AA2828",64345:"#CC6060",64390:"#CC6060",64425:"#CC6060",64461:"#CC6060",64504:"#F5C0C0",65105:"#CC6060",65139:"#7B1B1B",64568:"#AA2828",64602:"#AA2828",64639:"#CC6060",64719:"#AA2828",64773:"#F5C0C0",64826:"#AA2828",63688:"#CC6060",64871:"#CC6060",64942:"#CC6060",65099:"#7B1B1B",
+  64906:"#CC6060",64997:"#CC6060",65048:"#CC6060",65011:"#CC6060",63394:"#CC6060",63740:"#CC6060",63447:"#AA2828",63526:"#CC6060",63580:"#CC6060",65379:"#CC6060",66198:"#AA2828",66223:"#7B1B1B",66330:"#AA2828",66401:"#AA2828",66009:"#AA2828",66152:"#AA2828",101341:"#AA2828",66438:"#AA2828",66474:"#AA2828",101564:"#CC6060",
+  66526:"#AA2828",101840:"#AA2828",66580:"#AA2828",66697:"#AA2828",66731:"#CC6060",66768:"#CC6060",66857:"#CC6060",66955:"#AA2828",67014:"#AA2828",67121:"#AA2828",67167:"#AA2828",102286:"#CC6060",67256:"#CC6060",67292:"#7B1B1B",65413:"#CC6060",67327:"#CC6060",67407:"#CC6060",67470:"#AA2828",67522:"#7B1B1B",65707:"#AA2828",
+  67595:"#CC6060",67648:"#CC6060",67675:"#CC6060",67737:"#CC6060",65869:"#7B1B1B",67773:"#7B1B1B",67835:"#7B1B1B",67906:"#AA2828",67942:"#7B1B1B",68002:"#7B1B1B",68048:"#AA2828",68128:"#7B1B1B",68182:"#CC6060",68253:"#AA2828",65645:"#AA2828",104387:"#CC6060",68280:"#AA2828",68324:"#AA2828",68342:"#CC6060",179935:"#AA2828",
+  65752:"#CC6060",179908:"#7B1B1B",68404:"#AA2828",68431:"#7B1B1B",68468:"#CC6060",68529:"#CC6060",68565:"#7B1B1B",179891:"#AA2828",179926:"#7B1B1B",179917:"#7B1B1B",65431:"#CC6060",68716:"#AA2828",68789:"#CC6060",68887:"#7B1B1B",105142:"#AA2828",65477:"#CC6060",105534:"#CC6060",68921:"#7B1B1B",68976:"#AA2828",65501:"#F5C0C0",
+  69250:"#CC6060",69063:"#7B1B1B",69170:"#CC6060",69303:"#7B1B1B",69447:"#7B1B1B",69330:"#AA2828",69394:"#7B1B1B",179711:"#AA2828",69526:"#AA2828",69615:"#7B1B1B",179640:"#AA2828",65841:"#AA2828",65342:"#CC6060",65609:"#CC6060",65681:"#CC6060",65921:"#AA2828",68627:"#CC6060",66081:"#CC6060",70520:"#AA2828",70566:"#F5C0C0",
+  70637:"#AA2828",70673:"#7B1B1B",70726:"#AA2828",70744:"#AA2828",70940:"#AA2828",70897:"#AA2828",70968:"#7B1B1B",70986:"#AA2828",71055:"#CC6060",71126:"#AA2828",71199:"#AA2828",71260:"#AA2828",69964:"#CC6060",71340:"#AA2828",71607:"#AA2828",71457:"#7B1B1B",71518:"#7B1B1B",74859:"#F5C0C0",74867:"#AA2828",71536:"#7B1B1B",
+  71572:"#AA2828",74842:"#7B1B1B",71634:"#AA2828",71698:"#7B1B1B",71723:"#AA2828",71787:"#AA2828",71812:"#7B1B1B",71858:"#AA2828",71885:"#CC6060",71910:"#AA2828",74875:"#AA2828",71956:"#AA2828",72034:"#AA2828",72052:"#AA2828",72098:"#AA2828",74883:"#7B1B1B",72150:"#AA2828",72221:"#CC6060",72276:"#7B1B1B",72383:"#AA2828",
+  74891:"#7B1B1B",72579:"#7B1B1B",72409:"#F5C0C0",74907:"#7B1B1B",74915:"#7B1B1B",72463:"#AA2828",72506:"#CC6060",72533:"#CC6060",72604:"#7B1B1B",72640:"#7B1B1B",72677:"#AA2828",72819:"#7B1B1B",74923:"#CC6060",70094:"#F5C0C0",72882:"#AA2828",72926:"#AA2828",72953:"#7B1B1B",72980:"#AA2828",73013:"#AA2828",73031:"#AA2828",
+  73068:"#F5C0C0",73317:"#AA2828",73102:"#AA2828",73246:"#AA2828",73335:"#AA2828",73371:"#CC6060",73460:"#7B1B1B",73503:"#AA2828",73567:"#AA2828",73594:"#CC6060",73629:"#F5C0C0",73665:"#AA2828",73709:"#CC6060",74931:"#7B1B1B",70110:"#CC6060",73736:"#CC6060",73772:"#AA2828",73852:"#7B1B1B",73905:"#AA2828",73923:"#CC6060",
+  74949:"#AA2828",73996:"#7B1B1B",74028:"#7B1B1B",74073:"#AA2828",74108:"#AA2828",74135:"#7B1B1B",74171:"#7B1B1B",74224:"#7B1B1B",70174:"#CC6060",74242:"#7B1B1B",74956:"#7B1B1B",74322:"#AA2828",74359:"#AA2828",74411:"#AA2828",74509:"#AA2828",74536:"#AA2828",74554:"#AA2828",74581:"#AA2828",74732:"#7B1B1B",74750:"#AA2828",
+  74616:"#7B1B1B",74705:"#7B1B1B",70316:"#AA2828",70352:"#AA2828",69900:"#CC6060",70879:"#AA2828",72007:"#AA2828",70414:"#AA2828",70502:"#AA2828",75542:"#AA2828",75613:"#AA2828",75668:"#CC6060",75686:"#AA2828",75515:"#AA2828",75356:"#AA2828",75766:"#AA2828",75711:"#CC6060",75819:"#AA2828",75864:"#CC6060",75917:"#AA2828",
+  76004:"#CC6060",75953:"#AA2828",76040:"#AA2828",76111:"#AA2828",76139:"#AA2828",76157:"#AA2828",77595:"#AA2828",75221:"#AA2828",76175:"#AA2828",76255:"#AA2828",76282:"#AA2828",76317:"#AA2828",76353:"#AA2828",76406:"#AA2828",76497:"#AA2828",76558:"#AA2828",76585:"#CC6060",76601:"#CC6060",76638:"#AA2828",76674:"#CC6060",
+  76718:"#AA2828",76692:"#CC6060",76745:"#AA2828",75258:"#AA2828",76763:"#AA2828",77579:"#7B1B1B",76807:"#CC6060",76932:"#AA2828",76969:"#CC6060",76996:"#AA2828",77587:"#AA2828",77028:"#7B1B1B",77561:"#7B1B1B",77082:"#AA2828",77126:"#AA2828",77153:"#CC6060",75114:"#CC6060",77180:"#CC6060",77224:"#CC6060",77260:"#AA2828",
+  77288:"#7B1B1B",77601:"#7B1B1B",77377:"#AA2828",77313:"#CC6060",77331:"#CC6060",77402:"#AA2828",77475:"#AA2828",75150:"#CC6060",77509:"#CC6060",77536:"#7B1B1B",75098:"#CC6060",75203:"#CC6060",75338:"#AA2828",75472:"#CC6060",100781:"#CC6060",101001:"#AA2828",101163:"#F5C0C0",101378:"#AA2828",101519:"#AA2828",101617:"#7B1B1B",
+  101662:"#CC6060",101984:"#AA2828",102071:"#CC6060",102106:"#CC6060",179748:"#7B1B1B",102348:"#AA2828",102446:"#AA2828",102794:"#7B1B1B",102909:"#AA2828",103087:"#AA2828",103194:"#AA2828",103238:"#CC6060",103309:"#7B1B1B",103372:"#AA2828",103354:"#AA2828",103407:"#AA2828",103470:"#AA2828",179757:"#AA2828",103639:"#AA2828",103693:"#CC6060",
+  179766:"#7B1B1B",103899:"#AA2828",103997:"#F5C0C0",104047:"#AA2828",179739:"#7B1B1B",104225:"#AA2828",104118:"#CC6060",104485:"#AA2828",104519:"#AA2828",104680:"#AA2828",104715:"#CC6060",104788:"#7B1B1B",104831:"#CC6060",179775:"#CC6060",104975:"#CC6060",105106:"#AA2828",100549:"#7B1B1B",105295:"#CC6060",105348:"#7B1B1B",154709:"#AA2828",
+  105623:"#AA2828",105776:"#7B1B1B",105972:"#CC6060",105874:"#AA2828",105909:"#7B1B1B",100521:"#CC6060",101190:"#CC6060",104136:"#CC6060",78472:"#AA2828",78542:"#7B1B1B",78604:"#AA2828",78668:"#AA2828",78711:"#AA2828",78748:"#7B1B1B",77910:"#AA2828",79004:"#AA2828",78828:"#AA2828",78873:"#AA2828",78926:"#7B1B1B",79077:"#AA2828",
+  79157:"#7B1B1B",79237:"#AA2828",79362:"#AA2828",79406:"#CC6060",79736:"#F5C0C0",79497:"#AA2828",79585:"#CC6060",79656:"#CC6060",79834:"#AA2828",79932:"#AA2828",80043:"#7B1B1B",80123:"#AA2828",80249:"#AA2828",78016:"#AA2828",80285:"#F5C0C0",80365:"#7B1B1B",80427:"#7B1B1B",80506:"#AA2828",80560:"#AA2828",80613:"#AA2828",
+  80677:"#7B1B1B",80711:"#AA2828",80766:"#AA2828",80846:"#F5C0C0",80908:"#AA2828",80980:"#AA2828",81095:"#AA2828",81184:"#AA2828",81264:"#AA2828",81380:"#AA2828",81415:"#AA2828",81497:"#AA2828",81576:"#AA2828",81754:"#AA2828",81656:"#AA2828",81816:"#AA2828",81987:"#7B1B1B",81861:"#AA2828",82047:"#CC6060",82136:"#AA2828",
+  82243:"#AA2828",82314:"#AA2828",82680:"#AA2828",82396:"#AA2828",82555:"#AA2828",78089:"#AA2828",82733:"#AA2828",82779:"#7B1B1B",82831:"#AA2828",78141:"#AA2828",77812:"#CC6060",79308:"#AA2828",78258:"#AA2828",82895:"#CC6060",78329:"#AA2828",78454:"#AA2828",82430:"#AA2828",82617:"#AA2828",83785:"#AA2828",83847:"#AA2828",
+  83936:"#F5C0C0",83151:"#CC6060",83963:"#AA2828",84102:"#CC6060",86461:"#CC6060",83981:"#AA2828",84086:"#AA2828",84148:"#CC6060",84175:"#CC6060",86446:"#AA2828",84237:"#AA2828",84380:"#7B1B1B",84264:"#CC6060",84344:"#CC6060",83197:"#CC6060",84415:"#AA2828",84460:"#CC6060",84558:"#CC6060",84594:"#CC6060",86479:"#AA2828",
+  84629:"#AA2828",84656:"#AA2828",84754:"#CC6060",84825:"#CC6060",86438:"#CC6060",84923:"#AA2828",85056:"#CC6060",85074:"#AA2828",85127:"#AA2828",85243:"#CC6060",83375:"#AA2828",85289:"#AA2828",86487:"#CC6060",85341:"#CC6060",86495:"#AA2828",85412:"#CC6060",85467:"#AA2828",85680:"#CC6060",85760:"#AA2828",85788:"#CC6060",
+  85840:"#CC6060",86519:"#7B1B1B",85528:"#F5C0C0",86501:"#AA2828",85582:"#AA2828",85626:"#CC6060",85984:"#AA2828",85877:"#CC6060",85920:"#CC6060",86453:"#AA2828",86133:"#CC6060",86188:"#CC6060",86222:"#7B1B1B",86311:"#AA2828",86339:"#CC6060",86366:"#CC6060",83561:"#CC6060",83320:"#CC6060",83133:"#CC6060",83632:"#CC6060",
+  83428:"#CC6060",83464:"#AA2828",83491:"#F5C0C0",83525:"#CC6060",83749:"#CC6060",88047:"#CC6060",87745:"#AA2828",88092:"#CC6060",87843:"#AA2828",87246:"#7B1B1B",87996:"#AA2828",88216:"#7B1B1B",88261:"#CC6060",88350:"#7B1B1B",88449:"#AA2828",88546:"#AA2828",88644:"#AA2828",88788:"#CC6060",88868:"#AA2828",88920:"#7B1B1B",
+  89026:"#7B1B1B",89080:"#7B1B1B",86749:"#7B1B1B",89151:"#7B1B1B",89240:"#AA2828",87362:"#AA2828",89348:"#AA2828",89428:"#CC6060",91731:"#AA2828",86883:"#AA2828",89687:"#AA2828",89801:"#AA2828",89856:"#CC6060",89954:"#AA2828",90066:"#AA2828",90119:"#CC6060",90208:"#AA2828",90262:"#7B1B1B",90342:"#AA2828",90431:"#AA2828",
+  90538:"#AA2828",90725:"#7B1B1B",90663:"#AA2828",90878:"#CC6060",90805:"#CC6060",90994:"#AA2828",91116:"#AA2828",91232:"#CC6060",91054:"#AA2828",91330:"#CC6060",86936:"#CC6060",91447:"#CC6060",91535:"#7B1B1B",91624:"#CC6060",91688:"#CC6060",91937:"#7B1B1B",91795:"#AA2828",91982:"#F5C0C0",92097:"#AA2828",92177:"#CC6060",
+  87291:"#AA2828",86687:"#CC6060",86810:"#AA2828",87059:"#AA2828",87638:"#CC6060",86990:"#CC6060",87175:"#AA2828",87219:"#CC6060",87424:"#CC6060",89561:"#CC6060",87576:"#AA2828",87077:"#AA2828",87665:"#CC6060",87139:"#CC6060",100754:"#CC6060",92783:"#AA2828",100852:"#AA2828",92872:"#AA2828",100870:"#AA2828",100923:"#CC6060",
+  92907:"#CC6060",180064:"#7B1B1B",101056:"#AA2828",179784:"#7B1B1B",92989:"#CC6060",93021:"#CC6060",179793:"#7B1B1B",100709:"#AA2828",93101:"#AA2828",93156:"#CC6060",93209:"#CC6060",179971:"#7B1B1B",93236:"#CC6060",102240:"#CC6060",102641:"#CC6060",102703:"#CC6060",93575:"#CC6060",103283:"#AA2828",93600:"#CC6060",93628:"#AA2828",
+  93646:"#AA2828",93717:"#AA2828",93735:"#AA2828",180046:"#AA2828",103862:"#AA2828",103960:"#AA2828",179800:"#7B1B1B",100736:"#AA2828",179980:"#AA2828",93995:"#AA2828",94045:"#AA2828",179999:"#7B1B1B",94081:"#CC6060",104270:"#AA2828",94107:"#AA2828",179819:"#AA2828",94161:"#CC6060",180000:"#7B1B1B",101243:"#AA2828",94269:"#CC6060",
+  179828:"#7B1B1B",94330:"#7B1B1B",180019:"#AA2828",94376:"#AA2828",94429:"#CC6060",94456:"#AA2828",105026:"#CC6060",94492:"#CC6060",94535:"#AA2828",179702:"#AA2828",94688:"#CC6060",105794:"#CC6060",94795:"#CC6060",92701:"#AA2828",92658:"#CC6060",100683:"#CC6060",92836:"#CC6060",93067:"#CC6060",102749:"#CC6060",92765:"#AA2828",
+  95612:"#AA2828",95667:"#AA2828",95747:"#CC6060",100273:"#AA2828",95792:"#CC6060",95088:"#CC6060",95872:"#AA2828",95943:"#CC6060",96058:"#7B1B1B",96110:"#AA2828",96147:"#7B1B1B",100362:"#7B1B1B",96192:"#AA2828",96254:"#CC6060",96334:"#7B1B1B",96370:"#AA2828",100282:"#7B1B1B",96423:"#7B1B1B",96478:"#AA2828",96593:"#7B1B1B",
+  96637:"#AA2828",96664:"#7B1B1B",96717:"#AA2828",96815:"#AA2828",96888:"#AA2828",96904:"#AA2828",100308:"#7B1B1B",96940:"#CC6060",97009:"#7B1B1B",100317:"#7B1B1B",97063:"#AA2828",97090:"#AA2828",97189:"#AA2828",97241:"#AA2828",97321:"#7B1B1B",97394:"#7B1B1B",97438:"#AA2828",100326:"#7B1B1B",97465:"#AA2828",95159:"#CC6060",
+  97517:"#AA2828",95499:"#CC6060",97553:"#7B1B1B",97606:"#AA2828",97679:"#CC6060",97722:"#7B1B1B",97777:"#7B1B1B",97811:"#AA2828",97875:"#7B1B1B",97919:"#F5C0C0",98051:"#AA2828",98113:"#7B1B1B",98168:"#7B1B1B",98202:"#7B1B1B",98220:"#7B1B1B",98257:"#7B1B1B",98300:"#7B1B1B",98337:"#AA2828",98435:"#7B1B1B",98505:"#CC6060",
+  98603:"#7B1B1B",98649:"#7B1B1B",100335:"#AA2828",98685:"#CC6060",95239:"#CC6060",98738:"#AA2828",100344:"#7B1B1B",98774:"#AA2828",98916:"#7B1B1B",99290:"#7B1B1B",98827:"#AA2828",98998:"#AA2828",99058:"#7B1B1B",99370:"#AA2828",99101:"#7B1B1B",99165:"#7B1B1B",99209:"#CC6060",99441:"#7B1B1B",99478:"#AA2828",99673:"#AA2828",
+  99780:"#AA2828",99879:"#CC6060",99539:"#AA2828",95293:"#CC6060",99600:"#AA2828",99922:"#AA2828",96003:"#7B1B1B",100353:"#F5C0C0",99968:"#7B1B1B",100086:"#7B1B1B",100004:"#AA2828",100148:"#CC6060",100219:"#AA2828",95060:"#CC6060",95391:"#CC6060",95355:"#AA2828",98373:"#CC6060",95471:"#CC6060",102543:"#CC6060",100834:"#CC6060",
+  100969:"#F5C0C0",101145:"#CC6060",101298:"#CC6060",101742:"#CC6060",179249:"#F5C0C0",101902:"#CC6060",101957:"#CC6060",102035:"#CC6060",179588:"#CC6060",102160:"#CC6060",102213:"#CC6060",102525:"#AA2828",102473:"#CC6060",179310:"#CC6060",102570:"#CC6060",102605:"#F5C0C0",103130:"#CC6060",179347:"#F5C0C0",103443:"#AA2828",103513:"#CC6060",
+  179383:"#CC6060",104243:"#CC6060",179463:"#F5C0C0",104421:"#AA2828",104546:"#AA2828",104582:"#CC6060",105160:"#CC6060",105419:"#CC6060",105570:"#CC6060",105936:"#AA2828",179221:"#CC6060",100576:"#CC6060",179285:"#F5C0C0",179409:"#CC6060",179481:"#F5C0C0",179515:"#CC6060",179533:"#CC6060",179551:"#CC6060",107001:"#AA2828",107047:"#CC6060",
+  107083:"#AA2828",107118:"#AA2828",107154:"#CC6060",107314:"#AA2828",107190:"#7B1B1B",107234:"#7B1B1B",107270:"#AA2828",107350:"#AA2828",107403:"#AA2828",107430:"#7B1B1B",107485:"#AA2828",107519:"#AA2828",107546:"#7B1B1B",107715:"#AA2828",107582:"#AA2828",107662:"#F5C0C0",179837:"#7B1B1B",179846:"#AA2828",107733:"#CC6060",107868:"#AA2828",
+  107920:"#AA2828",107975:"#AA2828",108035:"#F5C0C0",108106:"#CC6060",179855:"#7B1B1B",108151:"#AA2828",106363:"#CC6060",179622:"#7B1B1B",108204:"#AA2828",108222:"#AA2828",108240:"#7B1B1B",108268:"#AA2828",108348:"#AA2828",108366:"#7B1B1B",108400:"#CC6060",179864:"#7B1B1B",108455:"#AA2828",179604:"#7B1B1B",108473:"#AA2828",106407:"#CC6060",
+  108491:"#AA2828",108552:"#AA2828",108598:"#AA2828",108614:"#7B1B1B",108632:"#AA2828",108669:"#AA2828",108696:"#AA2828",108794:"#AA2828",108874:"#AA2828",108918:"#CC6060",108945:"#AA2828",106620:"#AA2828",108712:"#AA2828",179613:"#7B1B1B",109096:"#AA2828",109005:"#AA2828",109041:"#AA2828",106648:"#7B1B1B",109354:"#7B1B1B",109425:"#7B1B1B",
+  109504:"#AA2828",106318:"#CC6060",106559:"#AA2828",106684:"#CC6060",106746:"#CC6060",106782:"#AA2828",108017:"#AA2828",108892:"#AA2828",108963:"#CC6060",109176:"#AA2828",106817:"#AA2828",106461:"#F5C0C0",109265:"#AA2828",106979:"#AA2828",110571:"#AA2828",110296:"#AA2828",110535:"#7B1B1B",110456:"#AA2828",110688:"#7B1B1B",114060:"#7B1B1B",
+  110740:"#AA2828",110820:"#CC6060",110875:"#AA2828",110946:"#AA2828",111006:"#AA2828",111097:"#AA2828",111220:"#7B1B1B",111275:"#AA2828",111417:"#AA2828",111444:"#AA2828",111550:"#AA2828",111480:"#AA2828",112904:"#CC6060",111587:"#7B1B1B",112245:"#AA2828",111685:"#AA2828",111783:"#AA2828",111818:"#7B1B1B",111863:"#CC6060",111916:"#7B1B1B",
+  111989:"#7B1B1B",112030:"#AA2828",112076:"#AA2828",112129:"#AA2828",112263:"#7B1B1B",112334:"#7B1B1B",112370:"#AA2828",112469:"#F5C0C0",112548:"#AA2828",112600:"#7B1B1B",112664:"#CC6060",112744:"#7B1B1B",110027:"#7B1B1B",112771:"#CC6060",112806:"#7B1B1B",112879:"#AA2828",112959:"#7B1B1B",112995:"#7B1B1B",113153:"#7B1B1B",113206:"#7B1B1B",
+  113233:"#AA2828",113395:"#7B1B1B",113466:"#7B1B1B",113493:"#7B1B1B",109826:"#CC6060",113625:"#CC6060",113698:"#7B1B1B",113518:"#7B1B1B",113607:"#CC6060",113732:"#7B1B1B",113849:"#7B1B1B",113894:"#AA2828",113929:"#AA2828",113974:"#7B1B1B",114079:"#7B1B1B",109773:"#CC6060",110063:"#AA2828",109924:"#AA2828",110116:"#CC6060",110232:"#CC6060",
+  114970:"#CC6060",115076:"#AA2828",114603:"#CC6060",115147:"#AA2828",115183:"#CC6060",115236:"#7B1B1B",115575:"#CC6060",115307:"#AA2828",115600:"#7B1B1B",115637:"#CC6060",115389:"#CC6060",115520:"#CC6060",115708:"#AA2828",120511:"#7B1B1B",115771:"#7B1B1B",115824:"#CC6060",115897:"#CC6060",115851:"#CC6060",115959:"#CC6060",116046:"#CC6060",
+  120478:"#7B1B1B",116126:"#CC6060",116171:"#7B1B1B",120487:"#F5C0C0",116224:"#AA2828",116288:"#AA2828",116340:"#AA2828",114355:"#F5C0C0",116395:"#AA2828",116439:"#7B1B1B",116493:"#CC6060",116545:"#CC6060",116590:"#CC6060",116652:"#CC6060",116796:"#CC6060",116723:"#AA2828",116867:"#CC6060",116938:"#CC6060",116983:"#7B1B1B",117042:"#CC6060",
+  117113:"#CC6060",117177:"#AA2828",117275:"#AA2828",117319:"#CC6060",117426:"#AA2828",117505:"#7B1B1B",117550:"#CC6060",117667:"#AA2828",117783:"#AA2828",117925:"#F5C0C0",117998:"#AA2828",118058:"#CC6060",120502:"#7B1B1B",118094:"#AA2828",118209:"#AA2828",118370:"#AA2828",118469:"#AA2828",118511:"#7B1B1B",118575:"#AA2828",118691:"#CC6060",
+  118637:"#AA2828",118753:"#AA2828",118799:"#CC6060",118824:"#AA2828",118995:"#CC6060",118931:"#CC6060",119153:"#CC6060",114382:"#F5C0C0",114417:"#CC6060",119386:"#CC6060",119466:"#F5C0C0",119527:"#7B1B1B",114453:"#F5C0C0",120496:"#7B1B1B",119206:"#CC6060",119750:"#7B1B1B",119803:"#AA2828",119590:"#AA2828",119625:"#CC6060",119661:"#CC6060",
+  119723:"#AA2828",119858:"#7B1B1B",119974:"#7B1B1B",120254:"#AA2828",120076:"#AA2828",120138:"#CC6060",120174:"#CC6060",120218:"#7B1B1B",120316:"#AA2828",120343:"#AA2828",120370:"#AA2828",114809:"#CC6060",114514:"#CC6060",114319:"#CC6060",114925:"#CC6060",117827:"#CC6060",114710:"#AA2828",118281:"#AA2828",119331:"#AA2828",119242:"#CC6060",
+  114854:"#F5C0C0",119894:"#CC6060",121108:"#CC6060",124938:"#AA2828",121153:"#AA2828",121242:"#CC6060",121386:"#7B1B1B",121466:"#AA2828",121297:"#CC6060",121340:"#F5C0C0",121607:"#AA2828",125178:"#7B1B1B",121652:"#CC6060",121732:"#AA2828",121796:"#AA2828",121876:"#7B1B1B",121938:"#7B1B1B",122061:"#7B1B1B",122025:"#AA2828",120888:"#CC6060",
+  122132:"#AA2828",122187:"#AA2828",122249:"#AA2828",122285:"#AA2828",125098:"#AA2828",122347:"#AA2828",125132:"#7B1B1B",122392:"#AA2828",122463:"#AA2828",120771:"#F5C0C0",122551:"#CC6060",122613:"#AA2828",125150:"#7B1B1B",122828:"#CC6060",122668:"#AA2828",125114:"#7B1B1B",122702:"#CC6060",122864:"#AA2828",122908:"#7B1B1B",122953:"#CC6060",
+  120922:"#CC6060",123013:"#AA2828",123102:"#AA2828",123175:"#AA2828",123228:"#AA2828",125169:"#7B1B1B",123255:"#AA2828",125141:"#7B1B1B",123601:"#CC6060",123371:"#AA2828",123424:"#AA2828",123479:"#AA2828",123521:"#AA2828",123674:"#AA2828",123790:"#CC6060",123709:"#7B1B1B",123914:"#AA2828",123969:"#AA2828",124028:"#AA2828",124073:"#7B1B1B",
+  125105:"#7B1B1B",124206:"#AA2828",124153:"#AA2828",120824:"#CC6060",124233:"#CC6060",124331:"#7B1B1B",124411:"#AA2828",124634:"#AA2828",124493:"#CC6060",124563:"#CC6060",124616:"#AA2828",124803:"#AA2828",124661:"#AA2828",124723:"#AA2828",124750:"#CC6060",124849:"#7B1B1B",124885:"#AA2828",125123:"#7B1B1B",125016:"#AA2828",125061:"#CC6060",
+  120726:"#CC6060",120860:"#CC6060",120968:"#AA2828",124117:"#CC6060",121055:"#AA2828",125659:"#AA2828",125677:"#7B1B1B",130286:"#7B1B1B",125757:"#7B1B1B",125846:"#7B1B1B",125873:"#AA2828",126022:"#7B1B1B",125962:"#AA2828",125999:"#CC6060",126077:"#AA2828",130295:"#7B1B1B",126166:"#7B1B1B",126102:"#7B1B1B",126148:"#AA2828",126228:"#AA2828",
+  126326:"#AA2828",126380:"#7B1B1B",126406:"#CC6060",126503:"#CC6060",126433:"#CC6060",126585:"#7B1B1B",126647:"#AA2828",126674:"#7B1B1B",126718:"#AA2828",126772:"#AA2828",126825:"#7B1B1B",125490:"#7B1B1B",126905:"#7B1B1B",126978:"#AA2828",127019:"#AA2828",127064:"#CC6060",125588:"#7B1B1B",130302:"#7B1B1B",130311:"#7B1B1B",127126:"#CC6060",
+  127144:"#7B1B1B",127171:"#7B1B1B",130320:"#7B1B1B",127224:"#AA2828",130339:"#7B1B1B",127251:"#AA2828",127288:"#AA2828",127322:"#CC6060",130348:"#7B1B1B",127368:"#AA2828",127386:"#7B1B1B",127411:"#AA2828",127493:"#AA2828",127536:"#CC6060",127563:"#7B1B1B",127625:"#7B1B1B",127689:"#7B1B1B",127714:"#AA2828",127750:"#7B1B1B",127812:"#7B1B1B",
+  127858:"#AA2828",127901:"#7B1B1B",127938:"#AA2828",130357:"#7B1B1B",127983:"#AA2828",128178:"#7B1B1B",128052:"#7B1B1B",128221:"#CC6060",128301:"#CC6060",128436:"#7B1B1B",128472:"#CC6060",128524:"#AA2828",128560:"#AA2828",128588:"#AA2828",128882:"#CC6060",130366:"#7B1B1B",128613:"#AA2828",128659:"#AA2828",128864:"#7B1B1B",129246:"#AA2828",
+  125374:"#CC6060",130384:"#7B1B1B",128962:"#AA2828",129040:"#7B1B1B",129282:"#7B1B1B",129095:"#CC6060",129111:"#CC6060",129139:"#CC6060",129184:"#CC6060",129317:"#7B1B1B",129380:"#CC6060",129460:"#AA2828",129503:"#7B1B1B",129567:"#AA2828",129585:"#AA2828",129629:"#AA2828",129718:"#7B1B1B",129745:"#7B1B1B",129987:"#AA2828",129656:"#AA2828",
+  129763:"#AA2828",129816:"#AA2828",129898:"#AA2828",130375:"#7B1B1B",129914:"#7B1B1B",130026:"#AA2828",130062:"#7B1B1B",130124:"#7B1B1B",130231:"#AA2828",125472:"#CC6060",125347:"#CC6060",125418:"#AA2828",125542:"#AA2828",125622:"#AA2828",128105:"#CC6060",128374:"#AA2828",128711:"#CC6060",131899:"#7B1B1B",131933:"#AA2828",131988:"#7B1B1B",
+  132011:"#AA2828",132075:"#F5C0C0",132137:"#7B1B1B",132164:"#7B1B1B",132226:"#AA2828",132271:"#AA2828",132315:"#CC6060",130552:"#CC6060",136278:"#7B1B1B",130614:"#CC6060",132342:"#7B1B1B",130678:"#F5C0C0",132379:"#7B1B1B",130712:"#F5C0C0",132404:"#CC6060",130785:"#F5C0C0",132459:"#7B1B1B",132486:"#AA2828",132510:"#F5C0C0",132574:"#AA2828",
+  132645:"#7B1B1B",132681:"#CC6060",136241:"#AA2828",132716:"#AA2828",132752:"#AA2828",132805:"#CC6060",132841:"#7B1B1B",133018:"#AA2828",132896:"#AA2828",133090:"#CC6060",131461:"#7B1B1B",133278:"#7B1B1B",133161:"#F5C0C0",133214:"#CC6060",133330:"#CC6060",133394:"#AA2828",133429:"#AA2828",133508:"#CC6060",133562:"#7B1B1B",133615:"#7B1B1B",
+  133688:"#CC6060",131835:"#AA2828",133722:"#7B1B1B",133795:"#AA2828",133866:"#7B1B1B",133919:"#7B1B1B",133964:"#AA2828",134014:"#CC6060",134050:"#AA2828",134096:"#CC6060",134194:"#CC6060",136250:"#AA2828",134336:"#7B1B1B",130847:"#F5C0C0",134390:"#7B1B1B",134443:"#7B1B1B",131274:"#CC6060",134559:"#AA2828",134648:"#AA2828",134755:"#7B1B1B",
+  134853:"#7B1B1B",134899:"#F5C0C0",134942:"#CC6060",135020:"#AA2828",135128:"#7B1B1B",135146:"#AA2828",135244:"#7B1B1B",135164:"#AA2828",135226:"#AA2828",135431:"#AA2828",135501:"#7B1B1B",135547:"#AA2828",135315:"#AA2828",135618:"#7B1B1B",135404:"#7B1B1B",135654:"#AA2828",130892:"#CC6060",135681:"#7B1B1B",135725:"#CC6060",135789:"#AA2828",
+  135850:"#AA2828",135896:"#AA2828",136269:"#AA2828",136198:"#AA2828",135949:"#AA2828",136107:"#CC6060",136134:"#AA2828",131256:"#CC6060",130534:"#CC6060",130954:"#CC6060",130981:"#CC6060",131069:"#CC6060",131103:"#AA2828",131210:"#CC6060",131336:"#CC6060",131407:"#CC6060",131443:"#CC6060",131540:"#CC6060",131577:"#CC6060",131620:"#CC6060",
+  131817:"#CC6060",139937:"#7B1B1B",139982:"#AA2828",140084:"#AA2828",140146:"#AA2828",140208:"#AA2828",140244:"#AA2828",140280:"#AA2828",140324:"#AA2828",180037:"#AA2828",140379:"#AA2828",140440:"#AA2828",140477:"#AA2828",140501:"#AA2828",140547:"#CC6060",140583:"#7B1B1B",140627:"#AA2828",140672:"#AA2828",140823:"#CC6060",140770:"#7B1B1B",
+  140869:"#AA2828",140958:"#AA2828",141027:"#7B1B1B",141081:"#7B1B1B",141134:"#AA2828",141232:"#AA2828",141312:"#AA2828",141376:"#CC6060",141447:"#AA2828",141535:"#7B1B1B",141580:"#AA2828",141722:"#CC6060",141786:"#AA2828",141884:"#7B1B1B",142006:"#AA2828",141946:"#AA2828",142079:"#AA2828",142122:"#AA2828",142177:"#CC6060",142239:"#CC6060",
+  142284:"#CC6060",142337:"#AA2828",142373:"#7B1B1B",142426:"#AA2828",142499:"#7B1B1B",142612:"#AA2828",142550:"#AA2828",142854:"#AA2828",142676:"#AA2828",142881:"#CC6060",179695:"#7B1B1B",142710:"#AA2828",142774:"#CC6060",179631:"#7B1B1B",142952:"#AA2828",143021:"#CC6060",143067:"#7B1B1B",143147:"#CC6060",139704:"#CC6060",139740:"#CC6060",
+  139811:"#CC6060",139884:"#CC6060",136713:"#AA2828",179873:"#AA2828",136768:"#AA2828",136802:"#AA2828",137103:"#7B1B1B",136919:"#AA2828",136964:"#AA2828",137032:"#AA2828",137069:"#CC6060",137130:"#AA2828",137185:"#CC6060",137229:"#AA2828",137274:"#AA2828",179677:"#AA2828",136553:"#AA2828",137292:"#AA2828",137363:"#7B1B1B",137407:"#CC6060",
+  179882:"#AA2828",137443:"#AA2828",137504:"#AA2828",137540:"#AA2828",137611:"#AA2828",137675:"#CC6060",137728:"#CC6060",137746:"#AA2828",137764:"#CC6060",137844:"#AA2828",137899:"#AA2828",137960:"#AA2828",138084:"#CC6060",138164:"#7B1B1B",138208:"#AA2828",138280:"#AA2828",138351:"#AA2828",138431:"#CC6060",138501:"#AA2828",138538:"#AA2828",
+  138574:"#AA2828",138618:"#AA2828",180028:"#AA2828",180091:"#7B1B1B",138770:"#AA2828",138663:"#AA2828",138734:"#AA2828",138805:"#AA2828",138869:"#7B1B1B",138921:"#CC6060",139009:"#AA2828",139143:"#AA2828",139054:"#AA2828",139107:"#AA2828",139170:"#AA2828",139214:"#AA2828",139250:"#AA2828",139287:"#AA2828",139330:"#AA2828",139358:"#CC6060",
+  139394:"#CC6060",136526:"#AA2828",136483:"#CC6060",136848:"#AA2828",138039:"#AA2828",136599:"#CC6060",136642:"#CC6060",146012:"#7B1B1B",143888:"#AA2828",143922:"#AA2828",143959:"#CC6060",143995:"#7B1B1B",144116:"#AA2828",144232:"#CC6060",144152:"#CC6060",144198:"#CC6060",144303:"#CC6060",146021:"#CC6060",144376:"#AA2828",144349:"#AA2828",
+  144410:"#F5C0C0",144508:"#F5C0C0",144535:"#CC6060",144456:"#AA2828",143487:"#F5C0C0",144553:"#CC6060",144599:"#CC6060",144615:"#AA2828",144651:"#AA2828",144713:"#CC6060",144731:"#AA2828",144795:"#CC6060",144866:"#7B1B1B",144893:"#CC6060",144964:"#AA2828",144991:"#7B1B1B",145042:"#AA2828",145104:"#CC6060",145140:"#AA2828",145202:"#CC6060",
+  145220:"#AA2828",145275:"#CC6060",143502:"#CC6060",145293:"#CC6060",145355:"#CC6060",143520:"#CC6060",145382:"#CC6060",145408:"#CC6060",145471:"#CC6060",145667:"#AA2828",145738:"#AA2828",143557:"#F5C0C0",145603:"#CC6060",145765:"#CC6060",145792:"#F5C0C0",143646:"#AA2828",145907:"#CC6060",145934:"#CC6060",145961:"#7B1B1B",145998:"#CC6060",
+  143619:"#CC6060",143450:"#F5C0C0",143682:"#CC6060",144054:"#CC6060",143735:"#CC6060",143771:"#CC6060",143806:"#CC6060",144928:"#CC6060",143851:"#CC6060",145499:"#F5C0C0",145827:"#CC6060",146799:"#AA2828",146860:"#AA2828",146904:"#CC6060",151530:"#7B1B1B",146995:"#AA2828",151576:"#AA2828",147036:"#AA2828",147054:"#AA2828",147072:"#CC6060",
+  147134:"#CC6060",147161:"#AA2828",147205:"#AA2828",147241:"#AA2828",147465:"#AA2828",151521:"#AA2828",147526:"#CC6060",147580:"#AA2828",151503:"#AA2828",147713:"#CC6060",151451:"#CC6060",151567:"#7B1B1B",151433:"#AA2828",147786:"#CC6060",151497:"#CC6060",147884:"#CC6060",147937:"#CC6060",148097:"#7B1B1B",148131:"#CC6060",148202:"#F5C0C0",
+  148293:"#AA2828",148328:"#AA2828",148382:"#AA2828",148426:"#CC6060",151488:"#CC6060",148453:"#AA2828",148514:"#AA2828",148667:"#AA2828",148694:"#AA2828",148729:"#AA2828",148765:"#CC6060",148872:"#AA2828",148916:"#AA2828",148970:"#AA2828",151512:"#7B1B1B",151549:"#7B1B1B",149101:"#CC6060",151479:"#CC6060",149049:"#AA2828",149138:"#CC6060",
+  151442:"#CC6060",147660:"#CC6060",146281:"#F5C0C0",149183:"#AA2828",149316:"#CC6060",149370:"#AA2828",149290:"#CC6060",146325:"#AA2828",149414:"#CC6060",149502:"#AA2828",149539:"#CC6060",149584:"#AA2828",149655:"#AA2828",149753:"#AA2828",149682:"#CC6060",149780:"#CC6060",149833:"#CC6060",149851:"#CC6060",151585:"#7B1B1B",149931:"#F5C0C0",
+  149968:"#7B1B1B",150043:"#CC6060",150070:"#AA2828",150114:"#AA2828",150178:"#CC6060",150445:"#AA2828",150196:"#CC6060",146432:"#F5C0C0",151460:"#AA2828",150221:"#AA2828",150258:"#CC6060",150294:"#AA2828",150310:"#AA2828",150356:"#CC6060",150418:"#F5C0C0",150524:"#CC6060",150588:"#AA2828",150702:"#7B1B1B",150766:"#AA2828",150891:"#AA2828",
+  150935:"#AA2828",150980:"#CC6060",151022:"#CC6060",151077:"#AA2828",151558:"#CC6060",151120:"#CC6060",151157:"#7B1B1B",151246:"#AA2828",151344:"#AA2828",146502:"#CC6060",146539:"#CC6060",146628:"#CC6060",146263:"#CC6060",146744:"#CC6060",147358:"#CC6060",147633:"#AA2828",148006:"#AA2828",148612:"#CC6060",146584:"#CC6060",149227:"#AA2828",
+  146931:"#AA2828",146370:"#CC6060",146655:"#AA2828",146708:"#AA2828",151095:"#AA2828",152038:"#7B1B1B",151996:"#AA2828",155083:"#7B1B1B",155092:"#7B1B1B",152083:"#CC6060",152127:"#AA2828",152172:"#AA2828",152234:"#AA2828",152252:"#AA2828",152270:"#7B1B1B",152314:"#7B1B1B",152332:"#AA2828",152350:"#AA2828",152412:"#AA2828",152467:"#7B1B1B",
+  152500:"#7B1B1B",152528:"#AA2828",151709:"#7B1B1B",152564:"#AA2828",152582:"#7B1B1B",152617:"#AA2828",152662:"#7B1B1B",151932:"#7B1B1B",152724:"#7B1B1B",152760:"#AA2828",155109:"#AA2828",152797:"#7B1B1B",152868:"#AA2828",152902:"#AA2828",155118:"#AA2828",155127:"#7B1B1B",152993:"#7B1B1B",152948:"#AA2828",153026:"#AA2828",153062:"#AA2828",
+  151736:"#AA2828",153106:"#AA2828",153124:"#AA2828",151763:"#AA2828",153151:"#AA2828",153240:"#AA2828",153277:"#AA2828",153339:"#AA2828",153204:"#AA2828",153295:"#7B1B1B",153384:"#7B1B1B",151816:"#CC6060",153400:"#7B1B1B",153437:"#7B1B1B",154996:"#7B1B1B",153473:"#AA2828",153507:"#AA2828",153543:"#AA2828",153561:"#CC6060",153589:"#AA2828",
+  153623:"#AA2828",153605:"#AA2828",153696:"#CC6060",151834:"#AA2828",155136:"#7B1B1B",153829:"#AA2828",153865:"#7B1B1B",153909:"#AA2828",153972:"#7B1B1B",155145:"#AA2828",153936:"#AA2828",154308:"#7B1B1B",154013:"#AA2828",154068:"#AA2828",154139:"#7B1B1B",154184:"#AA2828",154166:"#7B1B1B",154228:"#AA2828",154282:"#AA2828",154344:"#7B1B1B",
+  154380:"#7B1B1B",154415:"#AA2828",154497:"#AA2828",154460:"#7B1B1B",154521:"#AA2828",154585:"#AA2828",154665:"#AA2828",154834:"#CC6060",154736:"#AA2828",154754:"#AA2828",154790:"#AA2828",155154:"#7B1B1B",154932:"#AA2828",154852:"#AA2828",154914:"#AA2828",153776:"#AA2828",154978:"#7B1B1B",151790:"#CC6060",151870:"#AA2828",151683:"#AA2828",
+  151905:"#CC6060",151978:"#AA2828",155546:"#7B1B1B",155591:"#CC6060",155662:"#AA2828",155957:"#7B1B1B",155724:"#CC6060",155760:"#CC6060",155797:"#CC6060",155840:"#AA2828",155911:"#CC6060",159366:"#CC6060",156035:"#7B1B1B",156106:"#CC6060",156151:"#CC6060",159516:"#CC6060",156213:"#CC6060",156259:"#CC6060",156277:"#CC6060",159375:"#CC6060",
+  156311:"#CC6060",156437:"#AA2828",156473:"#AA2828",156534:"#CC6060",156589:"#AA2828",156623:"#AA2828",156669:"#AA2828",159384:"#CC6060",156712:"#CC6060",156767:"#AA2828",155261:"#CC6060",156927:"#CC6060",159393:"#CC6060",157004:"#CC6060",157031:"#CC6060",159400:"#CC6060",155289:"#F5C0C0",157193:"#CC6060",157246:"#F5C0C0",157273:"#F5C0C0",
+  155314:"#CC6060",157317:"#CC6060",159419:"#AA2828",159428:"#AA2828",157362:"#CC6060",157424:"#CC6060",157451:"#CC6060",157497:"#AA2828",159491:"#CC6060",157530:"#CC6060",157736:"#AA2828",157585:"#AA2828",157683:"#AA2828",157781:"#CC6060",157834:"#CC6060",157898:"#AA2828",157923:"#7B1B1B",157969:"#7B1B1B",158010:"#F5C0C0",159525:"#AA2828",
+  159446:"#CC6060",159437:"#CC6060",158065:"#CC6060",158109:"#CC6060",159507:"#AA2828",158136:"#7B1B1B",158181:"#CC6060",158243:"#AA2828",158396:"#F5C0C0",158564:"#CC6060",158449:"#CC6060",158779:"#CC6060",158653:"#CC6060",159464:"#CC6060",158699:"#CC6060",158733:"#CC6060",159455:"#AA2828",158528:"#CC6060",158608:"#CC6060",158804:"#CC6060",
+  158859:"#CC6060",158895:"#AA2828",159473:"#AA2828",158966:"#CC6060",159035:"#AA2828",159071:"#AA2828",159142:"#AA2828",159482:"#AA2828",159213:"#CC6060",159259:"#AA2828",159339:"#CC6060",155350:"#CC6060",155243:"#CC6060",155403:"#CC6060",156357:"#CC6060",155458:"#CC6060",156801:"#AA2828",157086:"#CC6060",155494:"#CC6060",158314:"#CC6060",
+  155528:"#CC6060",159785:"#CC6060",159847:"#CC6060",161552:"#AA2828",159883:"#7B1B1B",159945:"#7B1B1B",159963:"#CC6060",160092:"#CC6060",160047:"#AA2828",160127:"#CC6060",160172:"#CC6060",160225:"#AA2828",160261:"#F5C0C0",160305:"#AA2828",160323:"#AA2828",160387:"#CC6060",160430:"#CC6060",160458:"#7B1B1B",160476:"#AA2828",160528:"#7B1B1B",
+  161525:"#CC6060",160564:"#AA2828",160617:"#AA2828",160644:"#CC6060",160680:"#AA2828",160724:"#CC6060",160779:"#7B1B1B",160831:"#CC6060",160877:"#CC6060",160911:"#CC6060",160993:"#AA2828",161035:"#CC6060",161053:"#CC6060",161106:"#7B1B1B",161133:"#CC6060",161151:"#AA2828",161179:"#CC6060",161231:"#CC6060",161259:"#AA2828",161286:"#CC6060",
+  161302:"#CC6060",161348:"#CC6060",161384:"#AA2828",161464:"#CC6060",161543:"#AA2828",161482:"#CC6060",161561:"#7B1B1B",159614:"#CC6060",159650:"#CC6060",159687:"#CC6060",159730:"#AA2828",159767:"#CC6060",168229:"#AA2828",168309:"#7B1B1B",168559:"#CC6060",168675:"#AA2828",168755:"#7B1B1B",168791:"#F5C0C0",168880:"#CC6060",168960:"#7B1B1B",
+  169119:"#CC6060",169039:"#7B1B1B",169182:"#AA2828",169253:"#AA2828",169306:"#7B1B1B",169351:"#CC6060",169404:"#AA2828",174502:"#AA2828",169547:"#AA2828",169681:"#AA2828",169583:"#7B1B1B",169896:"#F5C0C0",169994:"#AA2828",170097:"#7B1B1B",170168:"#AA2828",170220:"#AA2828",170346:"#AA2828",170444:"#AA2828",170514:"#AA2828",174511:"#7B1B1B",
+  170685:"#AA2828",170612:"#AA2828",170792:"#AA2828",170872:"#7B1B1B",170952:"#AA2828",171101:"#AA2828",171209:"#AA2828",171021:"#CC6060",171272:"#AA2828",171067:"#AA2828",171325:"#CC6060",171469:"#AA2828",174520:"#7B1B1B",171539:"#7B1B1B",171628:"#AA2828",171806:"#AA2828",171879:"#CC6060",171931:"#7B1B1B",171995:"#7B1B1B",172082:"#CC6060",
+  172153:"#AA2828",172279:"#7B1B1B",172340:"#AA2828",172377:"#AA2828",172457:"#AA2828",172509:"#AA2828",172581:"#AA2828",172698:"#AA2828",172812:"#7B1B1B",172894:"#AA2828",172947:"#AA2828",172992:"#7B1B1B",173686:"#AA2828",173061:"#AA2828",173132:"#7B1B1B",173748:"#AA2828",173230:"#AA2828",173374:"#7B1B1B",173533:"#AA2828",173793:"#AA2828",
+  173597:"#AA2828",173855:"#7B1B1B",174496:"#7B1B1B",173935:"#AA2828",174021:"#AA2828",174085:"#AA2828",174156:"#AA2828",174218:"#AA2828",174254:"#CC6060",174290:"#7B1B1B",167981:"#AA2828",167473:"#CC6060",168372:"#CC6060",167641:"#CC6060",167696:"#CC6060",168452:"#AA2828",168602:"#CC6060",167794:"#AA2828",167909:"#CC6060",168041:"#AA2828",
+  168130:"#CC6060",162014:"#AA2828",162069:"#7B1B1B",162149:"#7B1B1B",162327:"#AA2828",162381:"#AA2828",162452:"#AA2828",162194:"#CC6060",162498:"#AA2828",162559:"#7B1B1B",162595:"#7B1B1B",162693:"#AA2828",162791:"#7B1B1B",162871:"#7B1B1B",162924:"#AA2828",167268:"#AA2828",163002:"#AA2828",163057:"#AA2828",163137:"#AA2828",167277:"#7B1B1B",
+  163208:"#7B1B1B",163253:"#7B1B1B",163324:"#7B1B1B",163379:"#7B1B1B",164277:"#AA2828",167286:"#AA2828",163486:"#AA2828",163618:"#CC6060",163681:"#AA2828",163734:"#7B1B1B",163789:"#AA2828",163832:"#CC6060",167295:"#7B1B1B",167231:"#7B1B1B",163903:"#7B1B1B",164062:"#7B1B1B",163967:"#AA2828",164133:"#AA2828",164197:"#CC6060",164339:"#7B1B1B",
+  164393:"#7B1B1B",164543:"#AA2828",164598:"#AA2828",164687:"#AA2828",164749:"#AA2828",164829:"#7B1B1B",164892:"#7B1B1B",164936:"#CC6060",167302:"#AA2828",165069:"#AA2828",165130:"#7B1B1B",165185:"#AA2828",165274:"#AA2828",167311:"#AA2828",165416:"#AA2828",167259:"#7B1B1B",165336:"#AA2828",165470:"#AA2828",165611:"#7B1B1B",167320:"#7B1B1B",
+  167240:"#7B1B1B",165719:"#AA2828",165817:"#CC6060",165899:"#7B1B1B",165979:"#AA2828",166057:"#AA2828",166137:"#AA2828",166235:"#AA2828",166182:"#AA2828",166315:"#7B1B1B",166413:"#7B1B1B",166529:"#AA2828",166636:"#7B1B1B",166672:"#AA2828",166707:"#AA2828",166770:"#CC6060",166869:"#7B1B1B",166985:"#AA2828",167035:"#CC6060",167071:"#AA2828",
+  167179:"#CC6060",161794:"#CC6060",161829:"#AA2828",161945:"#CC6060",164981:"#AA2828",161856:"#CC6060",175126:"#7B1B1B",175206:"#AA2828",175224:"#AA2828",178929:"#7B1B1B",175260:"#7B1B1B",175368:"#AA2828",175439:"#7B1B1B",175466:"#7B1B1B",175670:"#7B1B1B",175732:"#AA2828",175509:"#7B1B1B",174780:"#CC6060",175590:"#CC6060",175787:"#7B1B1B",
+  175885:"#AA2828",175938:"#CC6060",175983:"#AA2828",176150:"#AA2828",176212:"#CC6060",174824:"#CC6060",178938:"#AA2828",176301:"#AA2828",176338:"#7B1B1B",176445:"#7B1B1B",176506:"#AA2828",176551:"#7B1B1B",176613:"#CC6060",176686:"#AA2828",176748:"#AA2828",176793:"#CC6060",176855:"#AA2828",176891:"#AA2828",178885:"#AA2828",176944:"#AA2828",
+  177003:"#AA2828",178947:"#7B1B1B",177101:"#7B1B1B",178910:"#7B1B1B",177236:"#AA2828",178894:"#AA2828",177263:"#7B1B1B",178901:"#7B1B1B",177352:"#CC6060",177405:"#7B1B1B",178956:"#7B1B1B",177469:"#7B1B1B",177557:"#AA2828",177600:"#AA2828",177655:"#7B1B1B",177726:"#AA2828",177762:"#CC6060",178965:"#7B1B1B",177799:"#AA2828",177842:"#CC6060",
+  178046:"#7B1B1B",177879:"#7B1B1B",177986:"#AA2828",178180:"#AA2828",178117:"#CC6060",178279:"#AA2828",178313:"#7B1B1B",178607:"#CC6060",178689:"#AA2828",178377:"#AA2828",178475:"#AA2828",178545:"#AA2828",178750:"#AA2828",178821:"#CC6060",174860:"#CC6060",174744:"#CC6060",174922:"#CC6060",175019:"#CC6060",175055:"#AA2828",179150:"#CC6060",
+  179178:"#CC6060",179196:"#AA2828",179169:"#CC6060",179187:"#CC6060",179141:"#CC6060"
+};
+
+// ── STATE ──────────────────────────────────────────────────────────────────
+let geoData = null;
+let currentView = 'proposed';
+let hoveredId = null;
+let clickedId = null;  // feature kept highlighted after click
+let roadsVisible = false;
+
+// Edit mode state
+let editMode = false;
+const selectedSirutas = new Set();        // sirutas of currently selected communes
+const sirutaToMapId = {};                 // siruta -> MapLibre feature ID (cached on interaction)
+const sirutaToArrIdx = {};               // siruta -> array index in geoData.features
+const sirutaToCustomGroup = {};          // siruta -> group object (if in a custom group)
+const customGroupsList = [];             // ordered array of group objects
+let nextGroupId = 9001;
+
+// Financial data
+let finData = null;
+
+
+
+// ── MAP INIT ───────────────────────────────────────────────────────────────
+const map = new maplibregl.Map({
+  container: 'map',
+  style: 'https://basemaps.cartocdn.com/gl/dark-matter-nolabels-gl-style/style.json',
+  center: [25.1, 45.85],
+  zoom: 6.4,
+  minZoom: 5,
+  maxZoom: 14,
+  attributionControl: false,
+});
+
+map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
+
+// ── DATA LOAD ──────────────────────────────────────────────────────────────
+map.on('load', async () => {
+  let data;
+  let countyBoundaryData = null;
+  let regionBoundaryData  = null;
+  try {
+    const [geoRes, finRes, ctyRes, regRes] = await Promise.all([
+      fetch('./maxp_result.geojson'),
+      fetch('./fin_data.json?v=2').catch(() => null),
+      fetch('./county_boundaries.geojson').catch(() => null),
+      fetch('./region_boundaries.geojson').catch(() => null),
+    ]);
+    if (!geoRes.ok) throw new Error(`HTTP ${geoRes.status}`);
+    data = await geoRes.json();
+    if (finRes && finRes.ok) finData            = await finRes.json();
+    if (ctyRes && ctyRes.ok) countyBoundaryData = await ctyRes.json();
+    if (regRes && regRes.ok) regionBoundaryData = await regRes.json();
+  } catch (err) {
+    document.getElementById('loading').innerHTML = `
+      <div style="text-align:center;padding:40px;max-width:400px">
+        <div style="font-size:32px;margin-bottom:16px">⚠️</div>
+        <div style="color:#fff;font-size:16px;margin-bottom:8px">Nu s-a putut încărca fișierul de date</div>
+        <div style="color:rgba(255,255,255,0.4);font-size:13px;line-height:1.6">
+          Asigurați-vă că <code style="background:rgba(255,255,255,0.1);padding:2px 6px;border-radius:4px">maxp_result.geojson</code>
+          se află în același director cu <code style="background:rgba(255,255,255,0.1);padding:2px 6px;border-radius:4px">index.html</code>
+          și că serviți fișierele cu un server local
+          (<code style="background:rgba(255,255,255,0.1);padding:2px 6px;border-radius:4px">python -m http.server 8080</code>).
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  geoData = data;
+
+  // Pre-compute display colors and build lookup maps
+  geoData.features.forEach((f, idx) => {
+    const p = f.properties;
+    p._region_color = paletteColor(p.region_id);
+    p._county_color = getCountyColor(p.judet);
+    p._inefficiency_color = INEFFICIENCY_COLORS[String(p.siruta)] || '#2D3748';
+    p._display_color = p._region_color;
+    p._arr_idx = idx;
+    sirutaToArrIdx[p.siruta] = idx;
+  });
+
+  map.addSource('communes', {
+    type: 'geojson',
+    data: geoData,
+    generateId: true,
+  });
+
+  // Fill: colored by region/county/_display_color
+  map.addLayer({
+    id: 'fills',
+    type: 'fill',
+    source: 'communes',
+    paint: {
+      'fill-color': ['get', '_display_color'],
+      'fill-opacity': [
+        'case',
+        ['boolean', ['feature-state', 'hover'], false], 0.88,
+        0.68
+      ],
+    },
+  });
+
+  // Thin commune borders
+  map.addLayer({
+    id: 'borders',
+    type: 'line',
+    source: 'communes',
+    paint: {
+      'line-color': 'rgba(0,0,0,0.35)',
+      'line-width': 0.5,
+    },
+  });
+
+  // Hover outline
+  map.addLayer({
+    id: 'hover-outline',
+    type: 'line',
+    source: 'communes',
+    paint: {
+      'line-color': '#ffffff',
+      'line-width': ['case', ['boolean', ['feature-state', 'hover'], false], 1.5, 0],
+    },
+  });
+
+  // Selection fill (edit mode) — gold highlight
+  map.addLayer({
+    id: 'selected-fill',
+    type: 'fill',
+    source: 'communes',
+    paint: {
+      'fill-color': '#c9a84c',
+      'fill-opacity': ['case', ['boolean', ['feature-state', 'selected'], false], 0.40, 0],
+    },
+  });
+
+  // Selection outline (edit mode) — gold border
+  map.addLayer({
+    id: 'selected-outline',
+    type: 'line',
+    source: 'communes',
+    paint: {
+      'line-color': '#c9a84c',
+      'line-width': ['case', ['boolean', ['feature-state', 'selected'], false], 2.5, 0],
+      'line-opacity': 0.9,
+    },
+  });
+
+  // ── Commune labels (appear when zooming in) ──────────────────────────────
+  map.addLayer({
+    id: 'commune-labels',
+    type: 'symbol',
+    source: 'communes',
+    minzoom: 9,
+    layout: {
+      'text-field': ['get', 'denumire'],
+      'text-font': ['Noto Sans Regular', 'Arial Unicode MS Regular'],
+      'text-size': ['interpolate', ['linear'], ['zoom'], 9, 9, 13, 13],
+      'text-max-width': 7,
+      'text-anchor': 'center',
+      'text-allow-overlap': false,
+      'text-ignore-placement': false,
+      'text-padding': 3,
+    },
+    paint: {
+      'text-color': '#ffffff',
+      'text-halo-color': 'rgba(0,0,0,0.75)',
+      'text-halo-width': 1.5,
+      'text-opacity': ['interpolate', ['linear'], ['zoom'], 9, 0, 10, 1],
+    },
+  });
+
+  // County boundary lines (visible only in current view)
+  if (countyBoundaryData) {
+    // Feature index 0 = the MultiLineString of all county boundary edges
+    // Features 1+ = county label points
+    const boundaryFeature = countyBoundaryData.features.find(f => f.geometry.type === 'MultiLineString');
+    const labelFeatures   = countyBoundaryData.features.filter(f => f.geometry.type === 'Point');
+
+    map.addSource('county-lines', {
+      type: 'geojson',
+      data: { type: 'FeatureCollection', features: boundaryFeature ? [boundaryFeature] : [] },
+    });
+    map.addLayer({
+      id: 'county-borders',
+      type: 'line',
+      source: 'county-lines',
+      layout: { visibility: 'none' }, // hidden by default (shown in current view)
+      paint: {
+        'line-color': 'rgba(255,255,255,0.55)',
+        'line-width': 1.8,
+      },
+    });
+
+    map.addSource('county-labels-src', {
+      type: 'geojson',
+      data: { type: 'FeatureCollection', features: labelFeatures },
+    });
+    map.addLayer({
+      id: 'county-label-text',
+      type: 'symbol',
+      source: 'county-labels-src',
+      minzoom: 5,
+      layout: {
+        visibility: 'none',
+        'text-field': ['get', 'judet'],
+        'text-font': ['Noto Sans Regular', 'Arial Unicode MS Regular'],
+        'text-size': ['interpolate', ['linear'], ['zoom'], 5, 9, 8, 12],
+        'text-anchor': 'center',
+        'text-allow-overlap': false,
+      },
+      paint: {
+        'text-color': 'rgba(255,255,255,0.75)',
+        'text-halo-color': 'rgba(0,0,0,0.7)',
+        'text-halo-width': 1.2,
+      },
+    });
+  }
+
+
+  // ── County lines for proposed view ──────────────────────────────────────
+  if (countyBoundaryData) {
+    const ctyLines = countyBoundaryData.features.find(f => f.geometry.type === 'MultiLineString');
+    if (ctyLines) {
+      map.addSource('proposed-county-lines', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [ctyLines] },
+      });
+      map.addLayer({
+        id: 'proposed-county-borders', type: 'line', source: 'proposed-county-lines',
+        layout: { visibility: 'none' },
+        paint: { 'line-color': 'rgba(255,240,150,0.80)', 'line-width': 1.4 },
+      });
+    }
+  }
+
+  // ── Region lines for proposed view ───────────────────────────────────────
+  if (regionBoundaryData) {
+    const regLines  = regionBoundaryData.features.find(f => f.geometry.type === 'MultiLineString');
+    const regLabels = regionBoundaryData.features.filter(f => f.geometry.type === 'Point');
+
+    if (regLines) {
+      map.addSource('region-lines', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [regLines] },
+      });
+      map.addLayer({
+        id: 'region-borders', type: 'line', source: 'region-lines',
+        layout: { visibility: 'none' },
+        paint: { 'line-color': 'rgba(255,255,255,0.90)', 'line-width': 3.5 },
+      });
+    }
+
+    if (regLabels.length) {
+      map.addSource('region-labels-src', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: regLabels },
+      });
+      map.addLayer({
+        id: 'region-label-text', type: 'symbol', source: 'region-labels-src',
+        layout: {
+          visibility: 'none',
+          'text-field': ['get', 'region'],
+          'text-font': ['Noto Sans Regular', 'Arial Unicode MS Regular'],
+          'text-size': ['interpolate', ['linear'], ['zoom'], 5, 11, 8, 14],
+          'text-anchor': 'center',
+          'text-allow-overlap': false,
+          'text-transform': 'uppercase',
+          'text-letter-spacing': 0.08,
+        },
+        paint: {
+          'text-color': 'rgba(255,255,255,0.9)',
+          'text-halo-color': 'rgba(0,0,0,0.75)',
+          'text-halo-width': 1.5,
+        },
+      });
+    }
+  }
+
+  setupInteractions();
+
+  // Apply correct layer visibility for the initial view
+  setView(currentView);
+  addRoadLayers();
+  hideLoading();
+});
+
+// ── LOADING ────────────────────────────────────────────────────────────────
+function hideLoading() {
+  const el = document.getElementById('loading');
+  el.classList.add('fade-out');
+  setTimeout(() => el.remove(), 700);
+}
+
+// ── INTERACTIONS ───────────────────────────────────────────────────────────
+const tooltip = document.getElementById('tooltip');
+
+function setupInteractions() {
+  map.on('mousemove', 'fills', (e) => {
+    if (!e.features.length) return;
+    const f = e.features[0];
+    const p = f.properties;
+
+    // Cache siruta → MapLibre ID mapping on first encounter
+    const siruta = p.siruta;
+    if (sirutaToMapId[siruta] === undefined) {
+      sirutaToMapId[siruta] = f.id;
+    }
+
+    if (hoveredId !== null && hoveredId !== f.id && hoveredId !== clickedId) {
+      map.setFeatureState({ source: 'communes', id: hoveredId }, { hover: false });
+    }
+    hoveredId = f.id;
+    map.setFeatureState({ source: 'communes', id: hoveredId }, { hover: true });
+
+    // Position tooltip
+    const x = e.point.x, y = e.point.y;
+    const offsetX = x > window.innerWidth - 260 ? -240 : 16;
+    const offsetY = y > window.innerHeight - 100 ? -90 : -10;
+    tooltip.style.left = (x + offsetX) + 'px';
+    tooltip.style.top  = (y + offsetY) + 'px';
+    tooltip.style.display = 'block';
+
+    if (editMode) {
+      // Edit mode tooltip
+      const isSelected = selectedSirutas.has(p.siruta);
+      const customGroup = sirutaToCustomGroup[p.siruta];
+      tooltip.innerHTML = `
+        <div class="tt-name">${p.denumire}</div>
+        <div class="tt-line">${p.judet}</div>
+        <div class="tt-line">Populație: <span class="tt-pop">${fmt(p.populatie)}</span></div>
+        ${customGroup ? `<div class="tt-line" style="color:${customGroup.color};margin-top:3px">● Grup manual creat</div>` : ''}
+        <div class="${isSelected ? 'tt-selected' : 'tt-line'}" style="margin-top:4px">
+          ${isSelected ? '✓ Selectată — click pentru a deselecta' : 'Click pentru a selecta'}
+        </div>
+      `;
+    } else if (currentView === 'proposed') {
+      const nUats = Number(p.region_n_uats);
+      const customGroup = null; // proposed scenario is fixed — no manual groups shown
+      tooltip.innerHTML = `
+        <div class="tt-name">${p.denumire}</div>
+        <div class="tt-line">${p.judet}</div>
+        <div class="tt-line">Populație comună: <span class="tt-pop">${fmt(p.populatie)}</span></div>
+        ${customGroup
+          ? `<div class="tt-line" style="color:${customGroup.color};margin-top:3px">● Grup manual: ${fmt(customGroup.pop)} loc. · ${customGroup.n} comune</div>`
+          : (nUats > 1 ? `<div class="tt-line">Unitate propusă: <span class="tt-pop">${fmt(p.region_pop)} loc.</span> · ${nUats} comune</div>` : '')
+        }
+      `;
+    } else {
+      // Current view tooltip — show inefficiency rank hint
+      const ineff = INEFFICIENCY_COLORS[String(p.siruta)];
+      const ineff_hint = {
+        '#7B1B1B': '🔴 Sub cheltuieli personal administrativ',
+        '#AA2828': '🟠 Între personal administrativ și personal total',
+        '#CC6060': '🟡 Între personal total și cheltuieli funcționare',
+        '#F5C0C0': '🩷 Peste cheltuieli funcționare',
+      }[ineff] || '';
+      const customGroup = sirutaToCustomGroup[p.siruta];
+      tooltip.innerHTML = `
+        <div class="tt-name">${p.denumire}</div>
+        <div class="tt-line">${p.judet} · ${fmt(p.populatie)} loc.</div>
+        ${ineff_hint ? `<div class="tt-line" style="margin-top:3px">${ineff_hint}</div>` : ''}
+        ${customGroup ? `<div class="tt-line" style="color:${customGroup.color};margin-top:3px">● Grup manual: ${fmt(customGroup.pop)} loc.</div>` : ''}
+      `;
+    }
+
+    map.getCanvas().style.cursor = editMode ? 'crosshair' : 'pointer';
+  });
+
+  map.on('mouseleave', 'fills', () => {
+    if (hoveredId !== null && hoveredId !== clickedId) {
+      map.setFeatureState({ source: 'communes', id: hoveredId }, { hover: false });
+    }
+    hoveredId = null;
+    tooltip.style.display = 'none';
+    map.getCanvas().style.cursor = editMode ? 'crosshair' : '';
+  });
+
+  map.on('click', 'fills', (e) => {
+    if (!e.features.length) return;
+    const f = e.features[0];
+    const siruta = f.properties.siruta;
+
+    // Cache MapLibre ID
+    if (sirutaToMapId[siruta] === undefined) {
+      sirutaToMapId[siruta] = f.id;
+    }
+
+    if (editMode) {
+      toggleCommuneSelection(siruta, f.id);
+    } else {
+      // Clear previous click-highlight, set new one
+      if (clickedId !== null && clickedId !== f.id) {
+        map.setFeatureState({ source: 'communes', id: clickedId }, { hover: false });
+      }
+      clickedId = f.id;
+      showDetail(f.properties);
+    }
+  });
+
+  map.on('click', (e) => {
+    const hits = map.queryRenderedFeatures(e.point, { layers: ['fills'] });
+    if (!hits.length && !editMode) closeDetail();
+  });
+}
+
+// ── EDIT MODE ──────────────────────────────────────────────────────────────
+function setEditButtonEnabled(enabled) {
+  const btn = document.getElementById('btn-edit');
+  btn.disabled = !enabled;
+  btn.style.opacity = enabled ? '' : '0.3';
+  btn.style.cursor  = enabled ? '' : 'not-allowed';
+  btn.title = enabled ? '' : 'Editarea este disponibilă doar în Situație Actuală';
+}
+
+function toggleEditMode() {
+  editMode = !editMode;
+  const btn = document.getElementById('btn-edit');
+  btn.classList.toggle('active', editMode);
+
+  if (editMode) {
+    closeDetail();
+    document.getElementById('edit-panel').classList.add('open');
+    shiftUI(true);
+    map.getCanvas().style.cursor = 'crosshair';
+  } else {
+    clearSelection();
+    document.getElementById('edit-panel').classList.remove('open');
+    shiftUI(false);
+    map.getCanvas().style.cursor = '';
+  }
+  updateEditPanel();
+}
+
+function shiftUI(open) {
+  if (window.innerWidth <= 640) return; // on mobile panels use bottom-sheet layout
+  const offset = open ? '332px' : '20px';
+  document.getElementById('view-toggle').style.right = offset;
+  document.getElementById('attribution').style.right  = offset;
+}
+
+// ── COMMUNE SELECTION ──────────────────────────────────────────────────────
+function toggleCommuneSelection(siruta, mapId) {
+  if (selectedSirutas.has(siruta)) {
+    selectedSirutas.delete(siruta);
+    map.setFeatureState({ source: 'communes', id: mapId }, { selected: false });
+  } else {
+    selectedSirutas.add(siruta);
+    map.setFeatureState({ source: 'communes', id: mapId }, { selected: true });
+  }
+  updateEditPanel();
+}
+
+function clearSelection() {
+  selectedSirutas.forEach(siruta => {
+    const mapId = sirutaToMapId[siruta];
+    if (mapId !== undefined) {
+      map.setFeatureState({ source: 'communes', id: mapId }, { selected: false });
+    }
+  });
+  selectedSirutas.clear();
+  updateEditPanel();
+}
+
+// ── MERGE SELECTED ─────────────────────────────────────────────────────────
+function mergeSelected() {
+  if (selectedSirutas.size < 2) return;
+
+  let totalPop = 0, totalArea = 0;
+  const names = [];
+  const memberSirutas = new Set(selectedSirutas);
+
+  memberSirutas.forEach(siruta => {
+    const idx = sirutaToArrIdx[siruta];
+    const p = geoData.features[idx].properties;
+    totalPop += Number(p.populatie);
+    totalArea += Number(p.aria_km2);
+    names.push(p.denumire);
+  });
+
+  const color = GROUP_PALETTE[customGroupsList.length % GROUP_PALETTE.length];
+  const group = {
+    id: nextGroupId++,
+    color,
+    pop: Math.round(totalPop),
+    area: Math.round(totalArea),
+    n: memberSirutas.size,
+    members: memberSirutas,
+    names,
+  };
+
+  // Remove members from any previous custom group they belonged to
+  memberSirutas.forEach(siruta => {
+    const oldGroup = sirutaToCustomGroup[siruta];
+    if (oldGroup) {
+      oldGroup.members.delete(siruta);
+      oldGroup.n = oldGroup.members.size;
+      // Recompute old group pop/area
+      let p2 = 0, a2 = 0;
+      oldGroup.members.forEach(s => {
+        const fi = geoData.features[sirutaToArrIdx[s]].properties;
+        p2 += Number(fi.populatie);
+        a2 += Number(fi.aria_km2);
+      });
+      oldGroup.pop = Math.round(p2);
+      oldGroup.area = Math.round(a2);
+    }
+    sirutaToCustomGroup[siruta] = group;
+  });
+
+  // Remove any now-empty old groups from the list
+  for (let i = customGroupsList.length - 1; i >= 0; i--) {
+    if (customGroupsList[i].members.size === 0) {
+      customGroupsList.splice(i, 1);
+    }
+  }
+
+  customGroupsList.push(group);
+
+  // Update map colors
+  applyGroupColors();
+
+  // Deselect all (feature states cleared visually by applyGroupColors refresh)
+  selectedSirutas.forEach(siruta => {
+    const mapId = sirutaToMapId[siruta];
+    if (mapId !== undefined) {
+      map.setFeatureState({ source: 'communes', id: mapId }, { selected: false });
+    }
+  });
+  selectedSirutas.clear();
+
+  updateEditPanel();
+}
+
+// ── DISSOLVE GROUP ─────────────────────────────────────────────────────────
+function dissolveGroup(groupId) {
+  const idx = customGroupsList.findIndex(g => g.id === groupId);
+  if (idx === -1) return;
+  const group = customGroupsList[idx];
+
+  // Remove from lookup
+  group.members.forEach(siruta => {
+    delete sirutaToCustomGroup[siruta];
+  });
+
+  customGroupsList.splice(idx, 1);
+  applyGroupColors();
+  updateEditPanel();
+}
+
+// ── RESET ALL GROUPS ───────────────────────────────────────────────────────
+function resetAllGroups() {
+  if (customGroupsList.length === 0) return;
+  if (!confirm('Resetezi toate grupările manuale?')) return;
+
+  // Clear lookup
+  Object.keys(sirutaToCustomGroup).forEach(s => delete sirutaToCustomGroup[s]);
+  customGroupsList.length = 0;
+
+  applyGroupColors();
+  updateEditPanel();
+}
+
+// ── APPLY COLORS ───────────────────────────────────────────────────────────
+function applyGroupColors() {
+  geoData.features.forEach((f, idx) => {
+    const p = f.properties;
+    // Manual groups are only visible in "Situație actuală"
+    const group = currentView === 'current' ? sirutaToCustomGroup[p.siruta] : null;
+    p._display_color = group ? group.color : (currentView === 'proposed' ? p._region_color : p._inefficiency_color);
+  });
+  map.getSource('communes').setData(geoData);
+}
+
+// ── EXPORT GROUPS ──────────────────────────────────────────────────────────
+function exportGroups() {
+  if (customGroupsList.length === 0) return;
+  const result = {
+    timestamp: new Date().toISOString(),
+    n_groups: customGroupsList.length,
+    groups: customGroupsList.map(g => ({
+      id: g.id,
+      color: g.color,
+      n_communes: g.n,
+      pop_total: g.pop,
+      area_km2: g.area,
+      communes: [...g.members].map(siruta => {
+        const p = geoData.features[sirutaToArrIdx[siruta]].properties;
+        return {
+          siruta: p.siruta,
+          denumire: p.denumire,
+          judet: p.judet,
+          populatie: p.populatie,
+          aria_km2: Math.round(p.aria_km2),
+        };
+      }),
+    })),
+  };
+  const blob = new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'grupari_manuale.json';
+  a.click();
+}
+
+// ── EDIT PANEL RENDER ──────────────────────────────────────────────────────
+function updateEditPanel() {
+  const panel = document.getElementById('edit-panel');
+  if (!editMode) return;
+
+  // Compute selection stats
+  let selPop = 0, selArea = 0;
+  selectedSirutas.forEach(siruta => {
+    const p = geoData.features[sirutaToArrIdx[siruta]].properties;
+    selPop += Number(p.populatie);
+    selArea += Number(p.aria_km2);
+  });
+  const selCount = selectedSirutas.size;
+
+  // Pre-compute financial metrics for selected UATs (only shown when ≥ 2 selected)
+  const selFinHTML = selCount >= 2
+    ? renderFinMetrics(aggregateFinForSirutas([...selectedSirutas].map(String)), true)
+    : '';
+
+  // Build groups list HTML
+  const groupsHtml = customGroupsList.length === 0
+    ? `<div class="edit-empty-state">Nicio grupare creată.<br>Selectează comune și apasă <em>Unește</em>.</div>`
+    : customGroupsList.map(g => {
+        const label = g.n <= 2
+          ? g.names.join(' + ')
+          : `${g.names[0]} + ${g.n - 1} alte comune`;
+        return `
+          <div class="edit-group-item">
+            <div class="edit-group-swatch" style="background:${g.color}"></div>
+            <div class="edit-group-details">
+              <div class="edit-group-name" title="${g.names.join(', ')}">${label}</div>
+              <div class="edit-group-meta">${fmt(g.pop)} loc. · ${g.n} comune · ${fmt(g.area)} km²</div>
+            </div>
+            <button class="edit-group-remove" onclick="dissolveGroup(${g.id})" title="Dizolvă grupul">✕</button>
+          </div>
+        `;
+      }).join('');
+
+  panel.innerHTML = `
+    <div class="detail-header">
+      <div>
+        <div class="detail-eyebrow">Mod editare</div>
+        <div class="detail-title" style="font-size:16px">Grupare manuală</div>
+      </div>
+      <button class="close-btn" onclick="toggleEditMode()">✕</button>
+    </div>
+
+    <p class="edit-hint">
+      Apasă pe orice comună de pe hartă pentru a o selecta.
+      Selectează cel puțin două comune, apoi apasă <strong>Unește</strong> pentru a le grupa.
+    </p>
+
+    ${selCount > 0 ? `
+      <div class="edit-selection-box">
+        <div class="edit-sel-count">${selCount}</div>
+        <div class="edit-sel-sublabel">${selCount === 1 ? 'comună selectată' : 'comune selectate'}</div>
+        <div class="edit-sel-pop">${fmt(Math.round(selPop))} locuitori · ${fmt(Math.round(selArea))} km²</div>
+      </div>
+    ` : ''}
+
+    <button
+      class="edit-action-btn btn-merge"
+      onclick="mergeSelected()"
+      ${selCount < 2 ? 'disabled' : ''}
+    >⊕ Unește ${selCount >= 2 ? selCount + ' comune' : 'comune'}</button>
+
+    ${selCount > 0 ? `
+      <button class="edit-action-btn btn-secondary" onclick="clearSelection()">
+        Anulează selecția
+      </button>
+    ` : ''}
+
+    ${selFinHTML}
+
+    <div class="edit-divider"></div>
+
+    <div class="commune-list-header">
+      Grupuri create (${customGroupsList.length})
+    </div>
+
+    <div class="edit-groups-list">
+      ${groupsHtml}
+    </div>
+
+    ${customGroupsList.length > 0 ? `
+      <div style="margin-top: 16px; display: flex; flex-direction: column; gap: 7px;">
+        <button class="edit-action-btn btn-secondary" onclick="exportGroups()">
+          ↓ Descarcă configurația (.json)
+        </button>
+        <button class="edit-action-btn btn-danger" onclick="resetAllGroups()">
+          Resetează toate grupările
+        </button>
+      </div>
+    ` : ''}
+  `;
+}
+
+// ── SINGLE UAT DETAIL (current view) ───────────────────────────────────────
+function showCurrentUATDetail(props) {
+  const ineff = INEFFICIENCY_COLORS[String(props.siruta)];
+  const ineff_labels = {
+    '#7B1B1B': 'Sub cheltuieli personal administrativ',
+    '#AA2828': 'Între personal administrativ și personal total',
+    '#CC6060': 'Între personal total și cheltuieli funcționare',
+    '#F5C0C0': 'Peste cheltuieli funcționare',
+    '#2D3748': 'Date financiare indisponibile',
+  };
+  const ineff_label = ineff_labels[ineff] || '';
+  const ineff_dot = ineff ? `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${ineff};margin-right:5px;vertical-align:middle"></span>` : '';
+  const density = props.aria_km2 > 0 ? Math.round(props.populatie / props.aria_km2) : '—';
+
+  const panel = document.getElementById('detail');
+  panel.innerHTML = `
+    <div class="detail-header">
+      <div>
+        <div class="detail-eyebrow">${props.judet} · Situație actuală</div>
+        <div class="detail-title">${props.denumire}</div>
+      </div>
+      <button class="close-btn" onclick="closeDetail()">✕</button>
+    </div>
+
+    <div class="detail-stats-grid">
+      <div class="detail-stat-box">
+        <div class="dsb-value highlight">${fmt(props.populatie)}</div>
+        <div class="dsb-label">Locuitori</div>
+      </div>
+      <div class="detail-stat-box">
+        <div class="dsb-value">${fmt(Math.round(props.aria_km2))}</div>
+        <div class="dsb-label">km²</div>
+      </div>
+      <div class="detail-stat-box">
+        <div class="dsb-value">${density}</div>
+        <div class="dsb-label">loc./km²</div>
+      </div>
+      <div class="detail-stat-box">
+        <div class="dsb-value" style="font-size:14px">${props.siruta}</div>
+        <div class="dsb-label">Cod SIRUTA</div>
+      </div>
+    </div>
+
+    ${ineff_label ? `
+      <div style="margin-top:2px;font-size:11.5px;color:rgba(232,237,245,0.55)">
+        ${ineff_dot}${ineff_label}
+      </div>
+    ` : ''}
+
+    <div class="viability-badge ${props.populatie >= 5000 ? 'badge-ok' : 'badge-warn'}">
+      <span class="badge-dot"></span>
+      ${props.populatie >= 5000 ? 'Peste pragul de 5.000 loc.' : 'Sub pragul de 5.000 loc.'}
+    </div>
+  `;
+
+  // Financial metrics for this single UAT
+  panel.innerHTML += renderFinMetrics(aggregateFinForSirutas([String(props.siruta)]), false);
+
+  panel.classList.add('open');
+  shiftUI(true);
+}
+
+// ── DETAIL PANEL ───────────────────────────────────────────────────────────
+function showDetail(props) {
+  // In "Situație actuală": show single-UAT detail (or custom group if applicable)
+  if (currentView === 'current') {
+    const customGroup = sirutaToCustomGroup[props.siruta];
+    if (customGroup) {
+      showCustomGroupDetail(customGroup, props);
+    } else {
+      showCurrentUATDetail(props);
+    }
+    return;
+  }
+
+  // Proposed view: show the full merged-region detail
+  const customGroup = null; // proposed scenario has no custom groups
+
+  const regionId = props.region_id;
+  const members = geoData.features
+    .filter(f => f.properties.region_id === regionId)
+    .map(f => f.properties)
+    .sort((a, b) => b.populatie - a.populatie);
+
+  const nUats = members.length;
+  const regionPop  = Number(props.region_pop);
+  const regionArea = Math.round(props.region_area_km2);
+  const density    = Math.round(regionPop / regionArea);
+  const viable     = props.region_viable === 1 || props.region_viable === '1';
+
+  const badge = viable
+    ? `<div class="viability-badge badge-ok"><span class="badge-dot"></span> Prag minim atins</div>`
+    : `<div class="viability-badge badge-warn"><span class="badge-dot"></span> Sub pragul minim</div>`;
+
+  const listRows = members.map(m => `
+    <div class="commune-row">
+      <span class="commune-name" title="${m.denumire}">${m.denumire}</span>
+      <span class="commune-pop">${fmt(m.populatie)}</span>
+    </div>
+  `).join('');
+
+  const title = nUats === 1
+    ? `${members[0].denumire} <small style="font-size:14px;opacity:.5">(nesupus unirii)</small>`
+    : (nUats <= 3
+      ? members.map(m => m.denumire).join(' + ')
+      : `Unitate #${regionId}`);
+
+  const panel = document.getElementById('detail');
+  panel.innerHTML = `
+    <div class="detail-header">
+      <div>
+        <div class="detail-eyebrow">${nUats > 1 ? `Unitate propusă · ${props.judet}` : props.judet}</div>
+        <div class="detail-title">${title}</div>
+      </div>
+      <button class="close-btn" onclick="closeDetail()">✕</button>
+    </div>
+
+    <div class="detail-stats-grid">
+      <div class="detail-stat-box">
+        <div class="dsb-value highlight">${fmt(regionPop)}</div>
+        <div class="dsb-label">Locuitori totali</div>
+      </div>
+      <div class="detail-stat-box">
+        <div class="dsb-value">${fmt(regionArea)}</div>
+        <div class="dsb-label">km²</div>
+      </div>
+      <div class="detail-stat-box">
+        <div class="dsb-value">${nUats}</div>
+        <div class="dsb-label">${nUats === 1 ? 'comună' : 'comune unite'}</div>
+      </div>
+      <div class="detail-stat-box">
+        <div class="dsb-value">${density}</div>
+        <div class="dsb-label">loc./km²</div>
+      </div>
+    </div>
+
+    ${badge}
+
+    ${nUats > 1 ? `
+      <div class="commune-list-header" style="margin-top:18px">Componență</div>
+      ${listRows}
+    ` : ''}
+  `;
+
+  // Append financial metrics
+  const finSirutas = currentView === 'current'
+    ? [String(props.siruta)]
+    : members.map(m => String(m.siruta));
+  panel.innerHTML += renderFinMetrics(
+    aggregateFinForSirutas(finSirutas),
+    currentView === 'proposed' && nUats > 1
+  );
+
+  panel.classList.add('open');
+  shiftUI(true);
+}
+
+function showCustomGroupDetail(group, props) {
+  const members = [...group.members].map(siruta => {
+    return geoData.features[sirutaToArrIdx[siruta]].properties;
+  }).sort((a, b) => b.populatie - a.populatie);
+
+  const density = Math.round(group.pop / group.area);
+  const listRows = members.map(m => `
+    <div class="commune-row">
+      <span class="commune-name" title="${m.denumire}">${m.denumire}</span>
+      <span class="commune-pop">${fmt(m.populatie)}</span>
+    </div>
+  `).join('');
+
+  const title = group.n <= 3
+    ? members.map(m => m.denumire).join(' + ')
+    : `Grupare manuală`;
+
+  const panel = document.getElementById('detail');
+  panel.innerHTML = `
+    <div class="detail-header">
+      <div>
+        <div class="detail-eyebrow" style="color:${group.color}">● Grupare manuală · ${props.judet}</div>
+        <div class="detail-title" style="font-size:${group.n <= 3 ? '15px' : '18px'}">${title}</div>
+      </div>
+      <button class="close-btn" onclick="closeDetail()">✕</button>
+    </div>
+
+    <div class="detail-stats-grid">
+      <div class="detail-stat-box">
+        <div class="dsb-value highlight">${fmt(group.pop)}</div>
+        <div class="dsb-label">Locuitori totali</div>
+      </div>
+      <div class="detail-stat-box">
+        <div class="dsb-value">${fmt(group.area)}</div>
+        <div class="dsb-label">km²</div>
+      </div>
+      <div class="detail-stat-box">
+        <div class="dsb-value">${group.n}</div>
+        <div class="dsb-label">comune unite</div>
+      </div>
+      <div class="detail-stat-box">
+        <div class="dsb-value">${density}</div>
+        <div class="dsb-label">loc./km²</div>
+      </div>
+    </div>
+
+    <div class="viability-badge ${group.pop >= 5000 ? 'badge-ok' : 'badge-warn'}">
+      <span class="badge-dot"></span>
+      ${group.pop >= 5000 ? 'Prag minim atins' : 'Sub pragul minim de 5.000 loc.'}
+    </div>
+
+    <div class="commune-list-header" style="margin-top:18px">Componență</div>
+    ${listRows}
+
+    <button
+      class="edit-action-btn btn-danger"
+      style="margin-top:18px"
+      onclick="dissolveGroup(${group.id}); closeDetail();"
+    >Dizolvă grupul</button>
+  `;
+
+  // Append financial metrics with personnel savings
+  panel.innerHTML += renderFinMetrics(
+    aggregateFinForSirutas([...group.members].map(String)),
+    true
+  );
+
+  panel.classList.add('open');
+  shiftUI(true);
+}
+
+function closeDetail() {
+  // Remove click-highlight from the previously selected feature
+  if (clickedId !== null) {
+    map.setFeatureState({ source: 'communes', id: clickedId }, { hover: false });
+    clickedId = null;
+  }
+  const panel = document.getElementById('detail');
+  panel.classList.remove('open');
+  if (!editMode) shiftUI(false);
+}
+
+// ── VIEW TOGGLE ────────────────────────────────────────────────────────────
+function setView(v) {
+  currentView = v;
+  document.getElementById('btn-current').classList.toggle('active', v === 'current');
+  document.getElementById('btn-proposed').classList.toggle('active', v === 'proposed');
+
+  geoData.features.forEach(f => {
+    const p = f.properties;
+    const group = v === 'current' ? sirutaToCustomGroup[p.siruta] : null;
+    p._display_color = group ? group.color : (v === 'proposed' ? p._region_color : p._inefficiency_color);
+  });
+  map.getSource('communes').setData(geoData);
+
+  // County borders: current view (detailed) + proposed view (lighter)
+  const countyVisCurrent  = v === 'current'  ? 'visible' : 'none';
+  const countyVisProposed = v === 'proposed' ? 'visible' : 'none';
+  if (map.getLayer('county-borders'))          map.setLayoutProperty('county-borders',          'visibility', countyVisCurrent);
+  if (map.getLayer('county-label-text'))       map.setLayoutProperty('county-label-text',       'visibility', countyVisCurrent);
+  if (map.getLayer('proposed-county-borders')) map.setLayoutProperty('proposed-county-borders', 'visibility', countyVisProposed);
+
+  // Region borders + labels: only in proposed view
+  const regionVis = v === 'proposed' ? 'visible' : 'none';
+  if (map.getLayer('region-borders'))     map.setLayoutProperty('region-borders',     'visibility', regionVis);
+  if (map.getLayer('region-label-text'))  map.setLayoutProperty('region-label-text',  'visibility', regionVis);
+
+  // Inefficiency legend: only in current view
+  const legend = document.getElementById('ineff-legend');
+  if (legend) legend.classList.toggle('visible', v === 'current');
+
+  const statMain  = document.getElementById('stat-main');
+  const statLabel = document.getElementById('stat-main-label');
+  if (v === 'current') {
+    statMain.textContent = '3,186'; statLabel.textContent = 'Comune actuale';
+    statMain.classList.remove('accent');
+  } else {
+    statMain.textContent = '1,333'; statLabel.textContent = 'Scenariu 5000 loc.';
+    statMain.classList.add('accent');
+  }
+
+  // Edit mode: only available in "Situație actuală"
+  if (v === 'proposed') {
+    if (editMode) toggleEditMode();
+    setEditButtonEnabled(false);
+  } else {
+    setEditButtonEnabled(true);
+  }
+
+  if (!editMode) closeDetail();
+}
+
+// ── FINANCIAL HELPERS ──────────────────────────────────────────────────────
+
+// Aggregate additive financial columns for a list of SIRUTA strings,
+// then recompute all derived ratios + personnel savings benchmark.
+function aggregateFinForSirutas(sirutas) {
+  if (!finData) return null;
+  const ADDITIVE = [
+    'pit_total','pit_040100','pit_040400','tva_110100','tva_110600',
+    'impozite_proprietate','taxe_locale','venituri_operationale','total_venituri',
+    'chelt_personal','chelt_investitii','chelt_pnrr','total_cheltuieli',
+    'exec_personnel','population',
+    'chelt_functionare','chelt_dezvoltare',
+  ];
+  const agg = {};
+  ADDITIVE.forEach(k => { agg[k] = 0; });
+  let nFound = 0, nMissing = 0;
+  let maxFuncChelt = 0;
+
+  sirutas.forEach(s => {
+    const d = finData[String(s)];
+    if (d) {
+      ADDITIVE.forEach(k => { agg[k] += (d[k] || 0); });
+      if ((d.chelt_functionare || 0) > maxFuncChelt) maxFuncChelt = d.chelt_functionare;
+      nFound++;
+    } else {
+      nMissing++;
+    }
+  });
+
+  // Derived ratios (recomputed from sums)
+  agg.own_revenues       = agg.impozite_proprietate + agg.taxe_locale + agg.venituri_operationale + agg.pit_040100;
+  agg.pit_per_capita     = agg.population > 0 ? agg.pit_total / agg.population : 0;
+  agg.pit_recipient_ratio= agg.pit_040100 > 0 ? agg.pit_total / agg.pit_040100 : 0;
+  agg.autonomy_ratio     = agg.total_venituri > 0 ? agg.own_revenues / agg.total_venituri : 0;
+  agg.equalization_dep   = agg.total_venituri > 0 ? (agg.pit_040400 + agg.tva_110100 + agg.tva_110600) / agg.total_venituri : 0;
+  agg.exec_per_capita    = agg.population > 0 ? agg.exec_personnel / agg.population : 0;
+  agg.staff_share        = agg.total_cheltuieli > 0 ? agg.chelt_personal / agg.total_cheltuieli : 0;
+  agg.investment_share   = agg.total_cheltuieli > 0 ? (agg.chelt_investitii + agg.chelt_pnrr) / agg.total_cheltuieli : 0;
+
+  // Savings benchmark: keep largest member's chelt_functionare, eliminate the rest
+  // saving_func = sum(all) − max(single largest) = sum of redundant structures
+  agg.benchmark_func = maxFuncChelt;
+  agg.saving_func    = agg.chelt_functionare - maxFuncChelt;
+
+  agg._nFound   = nFound;
+  agg._nMissing = nMissing;
+  return agg;
+}
+
+// Format a RON value (uses 'M RON' shorthand above 1M)
+function ron(v) {
+  const abs = Math.abs(v);
+  const sign = v < 0 ? '−' : '';
+  if (abs >= 1e6) {
+    return sign + (abs / 1e6).toLocaleString('ro-RO', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' M RON';
+  }
+  return sign + Math.round(abs).toLocaleString('ro-RO') + ' RON';
+}
+
+// Format a fraction as a percentage string
+function pct(v) {
+  return (v * 100).toLocaleString('ro-RO', { maximumFractionDigits: 1 }) + '%';
+}
+
+// Render a mini progress bar (frac 0-1, color string)
+function miniBar(frac, color) {
+  const w = Math.min(100, Math.max(0, frac * 100)).toFixed(1);
+  return `<div class="fin-bar-wrap"><div class="fin-bar" style="width:${w}%;background:${color}"></div></div>`;
+}
+
+// Render the full financial metrics block (returns HTML string).
+// d = aggregated object from aggregateFinForSirutas()
+// showSavings = true for multi-commune groups
+function renderFinMetrics(d, showSavings) {
+  if (!d) return '';
+
+  const tot_ch = d.total_cheltuieli || 1;
+  const tot_v  = d.total_venituri   || 1;
+
+  // ── 1. Capacitate economică ──
+  const econHTML = `
+    <div class="fin-section">
+      <div class="fin-section-title">Capacitate economică</div>
+      <div class="fin-row">
+        <span class="fin-label">Impozit pe venit colectat</span>
+        <span class="fin-value">${ron(d.pit_total)}</span>
+      </div>
+    </div>`;
+
+  // ── 2. Autonomie fiscală ──
+  const autoHTML = `
+    <div class="fin-section">
+      <div class="fin-section-title">Autonomie fiscală</div>
+      <div class="fin-row">
+        <span class="fin-label">Venituri proprii</span>
+        <span class="fin-value">${ron(d.own_revenues)}</span>
+      </div>
+      ${miniBar(Math.min(d.own_revenues / tot_v, 1), '#c9a84c')}
+      <div class="fin-row" style="margin-top:6px">
+        <span class="fin-label">Cheltuieli personal administrativ</span>
+        <span class="fin-value">${ron(d.exec_personnel)}</span>
+      </div>
+      ${miniBar(d.exec_personnel / tot_ch, '#a78bfa')}
+      <div class="fin-row" style="margin-top:6px">
+        <span class="fin-label">Cheltuieli personal total</span>
+        <span class="fin-value">${ron(d.chelt_personal)}</span>
+      </div>
+      ${miniBar(d.chelt_personal / tot_ch, '#c084fc')}
+      <div class="fin-row" style="margin-top:6px">
+        <span class="fin-label">Cheltuieli funcționare</span>
+        <span class="fin-value">${ron(d.chelt_functionare)}</span>
+      </div>
+      ${miniBar(d.chelt_functionare / tot_ch, '#FF9F0A')}
+      <div class="fin-row">
+        <span class="fin-label">Cheltuieli dezvoltare</span>
+        <span class="fin-value">${ron(d.chelt_dezvoltare)}</span>
+      </div>
+      ${miniBar(d.chelt_dezvoltare / tot_ch, '#34c759')}
+    </div>`;
+
+  // ── 3. Economii estimate (only for merged groups) ──
+  let savingsHTML = '';
+  if (showSavings) {
+    const saving = d.saving_func;
+    const savingsRows = `
+      <div class="fin-row">
+        <span class="fin-label">Cheltuieli funcționare totale</span>
+        <span class="fin-value">${ron(d.chelt_functionare)}</span>
+      </div>
+      <div class="fin-row">
+        <span class="fin-label">Cel mai mare UAT (rămâne)</span>
+        <span class="fin-value">${ron(d.benchmark_func)}</span>
+      </div>`;
+    if (saving > 0) {
+      savingsHTML = `
+        <div class="fin-section">
+          <div class="fin-section-title">Economii estimate</div>
+          ${savingsRows}
+          <div class="fin-saving-box">
+            <div class="fin-saving-amount">${ron(saving)}</div>
+            <div class="fin-saving-label">economii estimate / an prin fuzionare</div>
+          </div>
+        </div>`;
+    } else {
+      savingsHTML = `
+        <div class="fin-section">
+          <div class="fin-section-title">Economii estimate</div>
+          ${savingsRows}
+          <div class="fin-cost-box">
+            <div class="fin-cost-amount">${ron(Math.abs(saving))}</div>
+            <div class="fin-cost-label">cost suplimentar față de benchmark</div>
+          </div>
+        </div>`;
+    }
+  }
+
+  const missingNote = d._nMissing > 0
+    ? `<p class="fin-missing-note">* Date financiare indisponibile pentru ${d._nMissing} UAT${d._nMissing > 1 ? '-uri' : ''}.</p>`
+    : '';
+
+  return econHTML + autoHTML + savingsHTML + missingNote;
+}
+
+// ── ROAD INFRASTRUCTURE ────────────────────────────────────────────────────
+function addRoadLayers() {
+  map.addSource('roads', {
+    type: 'vector',
+    url: 'https://tiles.openfreemap.org/planet',
+    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  });
+
+  // Insert all road layers ABOVE commune fills but BELOW commune borders
+  // so roads are visible but don't obscure administrative boundaries or labels
+
+  map.addLayer({
+    id: 'road-motorway',
+    type: 'line',
+    source: 'roads',
+    'source-layer': 'transportation',
+    filter: ['in', ['get', 'class'], ['literal', ['motorway', 'trunk']]],
+    layout: { 'line-cap': 'round', 'line-join': 'round', visibility: 'none' },
+    paint: {
+      'line-color': '#c9a84c',
+      'line-width': ['interpolate', ['linear'], ['zoom'], 6, 1.5, 8, 2.5, 10, 4.0, 13, 6.0],
+      'line-opacity': 1.0,
+    },
+    minzoom: 5,
+  }, 'borders');
+
+  map.addLayer({
+    id: 'road-primary',
+    type: 'line',
+    source: 'roads',
+    'source-layer': 'transportation',
+    filter: ['==', ['get', 'class'], 'primary'],
+    layout: { 'line-cap': 'round', 'line-join': 'round', visibility: 'none' },
+    paint: {
+      'line-color': 'rgba(255, 255, 255, 0.90)',
+      'line-width': ['interpolate', ['linear'], ['zoom'], 7, 1.0, 9, 2.0, 11, 3.0, 13, 5.0],
+      'line-opacity': 0.85,
+    },
+    minzoom: 7,
+  }, 'borders');
+
+  map.addLayer({
+    id: 'road-secondary',
+    type: 'line',
+    source: 'roads',
+    'source-layer': 'transportation',
+    filter: ['==', ['get', 'class'], 'secondary'],
+    layout: { 'line-cap': 'round', 'line-join': 'round', visibility: 'none' },
+    paint: {
+      'line-color': 'rgba(255, 255, 255, 0.60)',
+      'line-width': ['interpolate', ['linear'], ['zoom'], 8, 0.8, 10, 1.5, 12, 2.5, 14, 4.0],
+      'line-opacity': 0.75,
+    },
+    minzoom: 8,
+  }, 'borders');
+}
+
+// ── TOGGLE ROADS ───────────────────────────────────────────────────────────
+let zoomHintTimeout = null;
+
+function toggleRoads() {
+  roadsVisible = !roadsVisible;
+  const vis = roadsVisible ? 'visible' : 'none';
+
+  ['road-motorway', 'road-primary', 'road-secondary'].forEach(id => {
+    if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', vis);
+  });
+
+  const btn = document.getElementById('btn-roads');
+  const legend = document.getElementById('road-legend');
+
+  if (roadsVisible) {
+    btn.classList.add('road-active');
+    legend.classList.add('visible');
+    if (map.getZoom() < 7) showZoomHint();
+  } else {
+    btn.classList.remove('road-active');
+    legend.classList.remove('visible');
+    hideZoomHint();
+  }
+}
+
+function showZoomHint() {
+  const hint = document.getElementById('zoom-hint');
+  hint.classList.add('visible');
+  clearTimeout(zoomHintTimeout);
+  zoomHintTimeout = setTimeout(hideZoomHint, 3500);
+}
+
+function hideZoomHint() {
+  document.getElementById('zoom-hint').classList.remove('visible');
+}
+
+map.on('zoom', () => {
+  if (roadsVisible && map.getZoom() >= 7) hideZoomHint();
+});
+
+// ── UTIL ───────────────────────────────────────────────────────────────────
+function fmt(n) {
+  return Number(n).toLocaleString('ro-RO');
+}
+
+function openGuide() {
+  document.getElementById('guide-overlay').classList.add('open');
+}
+function closeGuide() {
+  document.getElementById('guide-overlay').classList.remove('open');
+}
+// Close on Escape key
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeGuide();
+});
+
+</script>
+</body>
+</html>
